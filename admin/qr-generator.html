@@ -61,6 +61,39 @@
             font-size: 0.9rem;
             color: #2e7d32;
         }
+        .label-info {
+            background: #fff3e0;
+            border: 1px solid #FF9800;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        .label-info h3 {
+            color: #e65100;
+            margin-bottom: 8px;
+            font-size: 1.1rem;
+        }
+        .label-info .specs {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .label-info .spec-item {
+            background: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .label-info .spec-item .label {
+            font-size: 0.8rem;
+            color: #666;
+        }
+        .label-info .spec-item .value {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #333;
+        }
         .form-row {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -115,42 +148,6 @@
             background: #4CAF50;
             color: white;
         }
-        .label-options {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-            margin-bottom: 16px;
-        }
-        .label-option {
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            padding: 16px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .label-option:hover {
-            border-color: #8B0000;
-        }
-        .label-option.selected {
-            border-color: #8B0000;
-            background: #fff5f5;
-        }
-        .label-option .size {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: #8B0000;
-        }
-        .label-option .info {
-            font-size: 0.85rem;
-            color: #666;
-            margin-top: 4px;
-        }
-        .label-option .product-no {
-            font-size: 0.75rem;
-            color: #999;
-            margin-top: 8px;
-        }
         #qr-preview {
             display: none;
             margin-top: 20px;
@@ -170,98 +167,55 @@
             position: relative;
             page-break-after: always;
         }
-        /* エーワン 31551: 40mm x 40mm, 24面 (4列 x 6段) */
-        .sheet-31551 {
-            padding-top: 8.5mm;
-            padding-left: 14mm;
+        /* エーワン 72212: 86.4mm x 42.3mm, 12面 (2列 x 6段) */
+        .sheet-72212 {
+            padding-top: 8.8mm;
+            padding-left: 18.6mm;
         }
-        .sheet-31551 .qr-grid {
+        .sheet-72212 .qr-grid {
             display: grid;
-            grid-template-columns: repeat(4, 45mm);
-            grid-template-rows: repeat(6, 45mm);
+            grid-template-columns: repeat(2, 86.4mm);
+            grid-template-rows: repeat(6, 46.6mm);
         }
-        .sheet-31551 .qr-cell {
-            width: 45mm;
-            height: 45mm;
+        .sheet-72212 .qr-cell {
+            width: 86.4mm;
+            height: 46.6mm;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 3mm;
+            border: 0.5px dashed #eee;
+        }
+        .sheet-72212 .qr-cell .qr-image {
+            flex-shrink: 0;
+            margin-right: 4mm;
+        }
+        .sheet-72212 .qr-cell canvas {
+            width: 35mm !important;
+            height: 35mm !important;
+        }
+        .sheet-72212 .qr-cell .qr-info {
+            flex: 1;
             display: flex;
             flex-direction: column;
-            align-items: center;
             justify-content: center;
         }
-        .sheet-31551 .qr-cell canvas {
-            width: 36mm !important;
-            height: 36mm !important;
-        }
-        .sheet-31551 .qr-cell .qr-label {
-            font-size: 7pt;
-            margin-top: 1mm;
-        }
-        /* エーワン 31553: 30mm x 30mm, 40面 (5列 x 8段) */
-        .sheet-31553 {
-            padding-top: 13.5mm;
-            padding-left: 17.5mm;
-        }
-        .sheet-31553 .qr-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 35mm);
-            grid-template-rows: repeat(8, 33.5mm);
-        }
-        .sheet-31553 .qr-cell {
-            width: 35mm;
-            height: 33.5mm;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        .sheet-31553 .qr-cell canvas {
-            width: 26mm !important;
-            height: 26mm !important;
-        }
-        .sheet-31553 .qr-cell .qr-label {
-            font-size: 6pt;
-            margin-top: 1mm;
-        }
-        /* エーワン 31555: 20mm x 20mm, 70面 (7列 x 10段) */
-        .sheet-31555 {
-            padding-top: 12mm;
-            padding-left: 30.5mm;
-        }
-        .sheet-31555 .qr-grid {
-            display: grid;
-            grid-template-columns: repeat(7, 21mm);
-            grid-template-rows: repeat(10, 23mm);
-        }
-        .sheet-31555 .qr-cell {
-            width: 21mm;
-            height: 23mm;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        .sheet-31555 .qr-cell canvas {
-            width: 17mm !important;
-            height: 17mm !important;
-        }
-        .sheet-31555 .qr-cell .qr-label {
-            font-size: 5pt;
-            margin-top: 0.5mm;
-        }
-        .qr-label {
-            text-align: center;
-            font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
-            color: #333;
+        .sheet-72212 .qr-cell .product-name {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #8B0000;
+            margin-bottom: 2mm;
             line-height: 1.2;
         }
-        .qr-label .product-name {
-            font-weight: bold;
-            font-size: 1.1em;
-            color: #8B0000;
-        }
-        .qr-label .qr-code-text {
+        .sheet-72212 .qr-cell .qr-code-text {
+            font-size: 11pt;
             font-family: monospace;
-            font-size: 0.9em;
+            color: #333;
+            margin-bottom: 1mm;
+        }
+        .sheet-72212 .qr-cell .box-info {
+            font-size: 9pt;
             color: #666;
         }
         .toast {
@@ -320,13 +274,11 @@
                 margin: 0;
                 page-break-after: always;
             }
+            .sheet-72212 .qr-cell {
+                border: none;
+            }
             .no-print {
                 display: none !important;
-            }
-        }
-        @media (max-width: 600px) {
-            .label-options {
-                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -338,26 +290,23 @@
 
     <div class="container">
         <div class="section">
-            <h2>ラベルシートを選択</h2>
-            <div class="info-box">
-                エーワン製QRコード用ラベルシートに対応しています。<br>
-                お使いのラベルシートの品番を選択してください。
-            </div>
-            <div class="label-options">
-                <div class="label-option selected" data-sheet="31551" onclick="selectSheet('31551')">
-                    <div class="size">40×40mm</div>
-                    <div class="info">24面（4列×6段）</div>
-                    <div class="product-no">品番: 31551</div>
-                </div>
-                <div class="label-option" data-sheet="31553" onclick="selectSheet('31553')">
-                    <div class="size">30×30mm</div>
-                    <div class="info">40面（5列×8段）</div>
-                    <div class="product-no">品番: 31553</div>
-                </div>
-                <div class="label-option" data-sheet="31555" onclick="selectSheet('31555')">
-                    <div class="size">20×20mm</div>
-                    <div class="info">70面（7列×10段）</div>
-                    <div class="product-no">品番: 31555</div>
+            <h2>使用ラベルシート</h2>
+            <div class="label-info">
+                <h3>📋 エーワン 品番: 72212</h3>
+                <p>ラベルシール［プリンタ兼用］マット紙・ホワイト A4 12面 四辺余白付</p>
+                <div class="specs">
+                    <div class="spec-item">
+                        <div class="label">1片サイズ</div>
+                        <div class="value">86.4×42.3mm</div>
+                    </div>
+                    <div class="spec-item">
+                        <div class="label">面付</div>
+                        <div class="value">12面（2列×6段）</div>
+                    </div>
+                    <div class="spec-item">
+                        <div class="label">入数</div>
+                        <div class="value">22シート（264片）</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -381,23 +330,26 @@
                     <small>箱の連番</small>
                     <input type="number" id="start-number" value="1" min="1">
                 </div>
+            </div>
+            <div class="form-row">
                 <div class="form-group">
                     <label>枚数</label>
-                    <small>生成するQRの数</small>
-                    <input type="number" id="count" value="24" min="1" max="200">
+                    <small>生成するQRの数（12の倍数推奨）</small>
+                    <input type="number" id="count" value="12" min="1" max="264">
                 </div>
             </div>
             <button class="btn btn-primary" onclick="generateQRCodes()">QRコードを生成</button>
         </div>
 
         <div id="qr-preview" class="section">
-            <h2>プレビュー・印刷</h2>
-            <div class="success-box" id="generation-info"></div>
+            <h2>プレビュー</h2>
+            <div id="generation-info" class="success-box"></div>
             <div class="no-print" style="margin-bottom: 16px;">
                 <button class="btn btn-success" onclick="window.print()">🖨️ 印刷</button>
-                <button class="btn btn-secondary" onclick="saveHistory()">📝 発行履歴を保存</button>
+                <button class="btn btn-secondary" onclick="saveHistory()">💾 発行履歴を保存</button>
             </div>
             <div class="print-area" id="print-area">
+                <!-- QRコードがここに生成される -->
             </div>
         </div>
 
@@ -442,22 +394,20 @@
             'LUCK': { name: '開運守り', quantity: 80 }
         };
 
-        // ラベルシート設定
+        // ラベルシート設定（72212専用）
         const SHEET_CONFIG = {
-            '31551': { cols: 4, rows: 6, perSheet: 24 },
-            '31553': { cols: 5, rows: 8, perSheet: 40 },
-            '31555': { cols: 7, rows: 10, perSheet: 70 }
+            cols: 2,
+            rows: 6,
+            perSheet: 12
         };
 
         let master = {};
-        let selectedSheet = '31551';
 
         // 初期化
         document.addEventListener('DOMContentLoaded', () => {
             loadMaster();
             populateProductSelect();
             loadHistory();
-            updateCountDefault();
         });
 
         // マスタ読み込み
@@ -486,21 +436,6 @@
             });
         }
 
-        // ラベルシート選択
-        function selectSheet(sheetId) {
-            selectedSheet = sheetId;
-            document.querySelectorAll('.label-option').forEach(el => {
-                el.classList.remove('selected');
-            });
-            document.querySelector(`[data-sheet="${sheetId}"]`).classList.add('selected');
-            updateCountDefault();
-        }
-
-        // デフォルト枚数を更新
-        function updateCountDefault() {
-            document.getElementById('count').value = SHEET_CONFIG[selectedSheet].perSheet;
-        }
-
         // QRコード生成
         async function generateQRCodes() {
             const productCode = document.getElementById('product-select').value;
@@ -513,41 +448,49 @@
                 return;
             }
 
-            const config = SHEET_CONFIG[selectedSheet];
             const printArea = document.getElementById('print-area');
             printArea.innerHTML = '';
 
             // シートごとに分割
-            const totalSheets = Math.ceil(count / config.perSheet);
+            const totalSheets = Math.ceil(count / SHEET_CONFIG.perSheet);
             let qrIndex = 0;
 
             for (let sheetNum = 0; sheetNum < totalSheets; sheetNum++) {
                 const sheet = document.createElement('div');
-                sheet.className = `print-sheet sheet-${selectedSheet}`;
+                sheet.className = 'print-sheet sheet-72212';
                 
                 const grid = document.createElement('div');
                 grid.className = 'qr-grid';
 
-                for (let i = 0; i < config.perSheet && qrIndex < count; i++) {
+                for (let i = 0; i < SHEET_CONFIG.perSheet && qrIndex < count; i++) {
                     const boxNumber = startNumber + qrIndex;
                     const qrData = `${productCode}-${year}-${String(boxNumber).padStart(4, '0')}`;
                     
                     const cell = document.createElement('div');
                     cell.className = 'qr-cell';
                     
+                    // QRコード部分
+                    const qrImage = document.createElement('div');
+                    qrImage.className = 'qr-image';
                     const canvas = document.createElement('canvas');
                     await QRCode.toCanvas(canvas, qrData, {
                         width: 200,
                         margin: 1,
                         errorCorrectionLevel: 'M'
                     });
+                    qrImage.appendChild(canvas);
                     
-                    const label = document.createElement('div');
-                    label.className = 'qr-label';
-                    label.innerHTML = `<div class="product-name">${master[productCode].name}</div><div class="qr-code-text">${year}-${String(boxNumber).padStart(4, '0')}</div>`;
+                    // 情報部分
+                    const qrInfo = document.createElement('div');
+                    qrInfo.className = 'qr-info';
+                    qrInfo.innerHTML = `
+                        <div class="product-name">${master[productCode].name}</div>
+                        <div class="qr-code-text">${qrData}</div>
+                        <div class="box-info">入数: ${master[productCode].quantity}個/箱</div>
+                    `;
                     
-                    cell.appendChild(canvas);
-                    cell.appendChild(label);
+                    cell.appendChild(qrImage);
+                    cell.appendChild(qrInfo);
                     grid.appendChild(cell);
                     
                     qrIndex++;
@@ -562,7 +505,7 @@
             document.getElementById('generation-info').innerHTML = `
                 <strong>${master[productCode].name}</strong>のQRコードを<strong>${count}枚</strong>生成しました。<br>
                 番号範囲: ${productCode}-${year}-${String(startNumber).padStart(4, '0')} 〜 ${productCode}-${year}-${String(startNumber + count - 1).padStart(4, '0')}<br>
-                印刷シート数: ${totalSheets}枚（${selectedSheet}用）
+                印刷シート数: ${totalSheets}枚（エーワン 72212用）
             `;
 
             showToast(`${count}枚のQRコードを生成しました`, 'success');
