@@ -250,8 +250,19 @@
         }
         .qr-label {
             text-align: center;
-            font-family: monospace;
+            font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
             color: #333;
+            line-height: 1.2;
+        }
+        .qr-label .product-name {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #8B0000;
+        }
+        .qr-label .qr-code-text {
+            font-family: monospace;
+            font-size: 0.9em;
+            color: #666;
         }
         .toast {
             position: fixed;
@@ -533,7 +544,7 @@
                     
                     const label = document.createElement('div');
                     label.className = 'qr-label';
-                    label.textContent = qrData;
+                    label.innerHTML = `<div class="product-name">${master[productCode].name}</div><div class="qr-code-text">${year}-${String(boxNumber).padStart(4, '0')}</div>`;
                     
                     cell.appendChild(canvas);
                     cell.appendChild(label);
