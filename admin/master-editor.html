@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>商品マスタ編集</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #8B0000 0%, #B22222 100%);
+            color: white;
+            padding: 16px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .section h2 {
+            color: #8B0000;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #8B0000;
+        }
+        .info-box {
+            background: #e3f2fd;
+            border: 1px solid #2196F3;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            color: #1565C0;
+        }
+        .warning-box {
+            background: #fff3e0;
+            border: 1px solid #ff9800;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            color: #e65100;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #f9f9f9;
+            font-weight: 600;
+            color: #666;
+        }
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        input:focus {
+            outline: none;
+            border-color: #8B0000;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+        .btn-primary {
+            background: #8B0000;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #6B0000;
+        }
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+        .btn-success {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-info {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 0.875rem;
+        }
+        .add-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr 100px auto;
+            gap: 10px;
+            align-items: end;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #eee;
+        }
+        .add-form label {
+            display: block;
+            font-size: 0.875rem;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 24px;
+            z-index: 1000;
+            display: none;
+        }
+        .toast.success { background: #4CAF50; }
+        .toast.error { background: #f44336; }
+        .toast.show { display: block; }
+        .actions {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .action-group {
+            margin-bottom: 16px;
+        }
+        .action-group h3 {
+            font-size: 1rem;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #8B0000;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+        }
+        @media (max-width: 600px) {
+            .add-form {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⚙️ 商品マスタ編集</h1>
+    </div>
+
+    <div class="container">
+        <div class="section">
+            <h2>現在の商品マスタ</h2>
+            <div class="info-box">
+                商品コードは英大文字のみ使用できます。入数は1箱あたりのお守りの個数です。
+            </div>
+            <table id="master-table">
+                <thead>
+                    <tr>
+                        <th>商品コード</th>
+                        <th>商品名</th>
+                        <th>入数</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="master-tbody">
+                </tbody>
+            </table>
+
+            <div class="add-form">
+                <div>
+                    <label>商品コード</label>
+                    <input type="text" id="new-code" placeholder="例: OMAMORI">
+                </div>
+                <div>
+                    <label>商品名</label>
+                    <input type="text" id="new-name" placeholder="例: 新商品守り">
+                </div>
+                <div>
+                    <label>入数</label>
+                    <input type="number" id="new-quantity" placeholder="50" min="1">
+                </div>
+                <div>
+                    <button class="btn btn-success" onclick="addProduct()">追加</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>マスタの保存・共有</h2>
+            <div class="warning-box">
+                ⚠️ ブラウザのキャッシュをクリアするとマスタが消えます。<br>
+                必ず「ファイルに保存」でバックアップを取ってください。
+            </div>
+            
+            <div class="action-group">
+                <h3>📱 スマホ間でマスタを共有する</h3>
+                <button class="btn btn-info" onclick="exportMaster()">📤 ファイルに保存</button>
+                <div class="file-input-wrapper">
+                    <button class="btn btn-info">📥 ファイルから読み込み</button>
+                    <input type="file" id="import-file" accept=".json" onchange="importMaster(event)">
+                </div>
+                <p style="font-size: 0.85rem; color: #666; margin-top: 8px;">
+                    保存したファイルはLINE・AirDrop・メールで他のスマホに送れます
+                </p>
+            </div>
+
+            <div class="action-group">
+                <h3>💾 このスマホに保存</h3>
+                <button class="btn btn-primary" onclick="saveMaster()">ブラウザに保存</button>
+                <button class="btn btn-danger" onclick="resetMaster()">🔄 初期状態に戻す</button>
+            </div>
+
+            <div class="action-group">
+                <h3>🔧 開発者向け</h3>
+                <button class="btn btn-secondary" onclick="exportMasterAsJS()">📤 app.js用コード出力</button>
+                <p style="font-size: 0.85rem; color: #666; margin-top: 8px;">
+                    GitHub Pagesのデフォルトマスタを変更する場合に使用
+                </p>
+            </div>
+        </div>
+
+        <a href="index.html" class="back-link">← 管理メニューに戻る</a>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // デフォルトマスタ
+        const DEFAULT_MASTER = {
+            'HEALTH': { name: '健康守り', quantity: 50 },
+            'MONEY': { name: '金運守り', quantity: 100 },
+            'LOVE': { name: '縁結び守り', quantity: 80 },
+            'TRAFFIC': { name: '交通安全守り', quantity: 60 },
+            'STUDY': { name: '学業成就守り', quantity: 70 },
+            'FAMILY': { name: '家内安全守り', quantity: 50 },
+            'BUSINESS': { name: '商売繁盛守り', quantity: 60 },
+            'CHILD': { name: '子授け守り', quantity: 40 },
+            'RECOVERY': { name: '病気平癒守り', quantity: 50 },
+            'LUCK': { name: '開運守り', quantity: 80 }
+        };
+
+        let master = {};
+
+        // 初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadMaster();
+            renderTable();
+        });
+
+        // マスタ読み込み
+        function loadMaster() {
+            const stored = localStorage.getItem('omamori_master');
+            if (stored) {
+                try {
+                    master = JSON.parse(stored);
+                } catch (e) {
+                    master = { ...DEFAULT_MASTER };
+                }
+            } else {
+                master = { ...DEFAULT_MASTER };
+            }
+        }
+
+        // テーブル描画
+        function renderTable() {
+            const tbody = document.getElementById('master-tbody');
+            tbody.innerHTML = '';
+
+            Object.keys(master).sort().forEach(code => {
+                const product = master[code];
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><input type="text" value="${code}" data-original="${code}" onchange="updateCode(this)"></td>
+                    <td><input type="text" value="${product.name}" onchange="updateName('${code}', this.value)"></td>
+                    <td><input type="number" value="${product.quantity}" min="1" onchange="updateQuantity('${code}', this.value)"></td>
+                    <td><button class="btn btn-danger btn-small" onclick="deleteProduct('${code}')">削除</button></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // 商品コード更新
+        function updateCode(input) {
+            const oldCode = input.dataset.original;
+            let newCode = input.value.toUpperCase().replace(/[^A-Z]/g, '');
+            input.value = newCode;
+
+            if (newCode && newCode !== oldCode) {
+                if (master[newCode]) {
+                    showToast('このコードは既に使用されています', 'error');
+                    input.value = oldCode;
+                    return;
+                }
+                master[newCode] = master[oldCode];
+                delete master[oldCode];
+                input.dataset.original = newCode;
+                showToast('商品コードを更新しました', 'success');
+            }
+        }
+
+        // 商品名更新
+        function updateName(code, name) {
+            if (master[code]) {
+                master[code].name = name;
+                showToast('商品名を更新しました', 'success');
+            }
+        }
+
+        // 入数更新
+        function updateQuantity(code, quantity) {
+            if (master[code]) {
+                master[code].quantity = parseInt(quantity) || 1;
+                showToast('入数を更新しました', 'success');
+            }
+        }
+
+        // 商品追加
+        function addProduct() {
+            let code = document.getElementById('new-code').value.toUpperCase().replace(/[^A-Z]/g, '');
+            const name = document.getElementById('new-name').value.trim();
+            const quantity = parseInt(document.getElementById('new-quantity').value) || 50;
+
+            if (!code) {
+                showToast('商品コードを入力してください', 'error');
+                return;
+            }
+            if (!name) {
+                showToast('商品名を入力してください', 'error');
+                return;
+            }
+            if (master[code]) {
+                showToast('このコードは既に使用されています', 'error');
+                return;
+            }
+
+            master[code] = { name, quantity };
+            renderTable();
+
+            // フォームクリア
+            document.getElementById('new-code').value = '';
+            document.getElementById('new-name').value = '';
+            document.getElementById('new-quantity').value = '';
+
+            showToast('商品を追加しました', 'success');
+        }
+
+        // 商品削除
+        function deleteProduct(code) {
+            if (confirm(`「${master[code].name}」を削除しますか？`)) {
+                delete master[code];
+                renderTable();
+                showToast('商品を削除しました', 'success');
+            }
+        }
+
+        // ブラウザに保存
+        function saveMaster() {
+            localStorage.setItem('omamori_master', JSON.stringify(master));
+            showToast('マスタを保存しました', 'success');
+        }
+
+        // JSONエクスポート（ファイルに保存）
+        function exportMaster() {
+            const exportData = {
+                version: '1.0',
+                exportDate: new Date().toISOString(),
+                master: master
+            };
+            const json = JSON.stringify(exportData, null, 2);
+            const filename = `omamori_master_${new Date().toISOString().slice(0,10)}.json`;
+            downloadFile(json, filename, 'application/json');
+            showToast('マスタファイルを保存しました', 'success');
+        }
+
+        // JSONインポート（ファイルから読み込み）
+        function importMaster(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    // 新形式（version付き）と旧形式の両方に対応
+                    let importedMaster;
+                    if (data.master && typeof data.master === 'object') {
+                        importedMaster = data.master;
+                    } else if (typeof data === 'object' && !data.version) {
+                        importedMaster = data;
+                    } else {
+                        throw new Error('Invalid format');
+                    }
+
+                    // 形式チェック
+                    const keys = Object.keys(importedMaster);
+                    if (keys.length === 0) {
+                        throw new Error('Empty master');
+                    }
+
+                    // 各商品の形式チェック
+                    for (const code of keys) {
+                        const product = importedMaster[code];
+                        if (!product.name || typeof product.quantity !== 'number') {
+                            throw new Error('Invalid product format');
+                        }
+                    }
+
+                    // 確認ダイアログ
+                    if (confirm(`${keys.length}件の商品データを読み込みます。\n現在のマスタは上書きされます。よろしいですか？`)) {
+                        master = importedMaster;
+                        renderTable();
+                        saveMaster(); // 自動保存
+                        showToast(`${keys.length}件の商品を読み込みました`, 'success');
+                    }
+                } catch (error) {
+                    showToast('ファイルの形式が正しくありません', 'error');
+                    console.error('Import error:', error);
+                }
+            };
+            reader.readAsText(file);
+            
+            // 同じファイルを再度選択できるようにリセット
+            event.target.value = '';
+        }
+
+        // app.js用エクスポート
+        function exportMasterAsJS() {
+            let js = 'const DEFAULT_MASTER = {\n';
+            Object.keys(master).sort().forEach(code => {
+                const p = master[code];
+                js += `    '${code}': { name: '${p.name}', quantity: ${p.quantity} },\n`;
+            });
+            js += '};\n';
+            downloadFile(js, 'master_for_appjs.txt', 'text/plain');
+            showToast('app.js用コードを出力しました', 'success');
+        }
+
+        // 初期状態に戻す
+        function resetMaster() {
+            if (confirm('マスタを初期状態に戻しますか？\n追加した商品は削除されます。')) {
+                master = { ...DEFAULT_MASTER };
+                renderTable();
+                showToast('初期状態に戻しました', 'success');
+            }
+        }
+
+        // ファイルダウンロード
+        function downloadFile(content, filename, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // トースト表示
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type + ' show';
+            setTimeout(() => {
+                toast.className = 'toast';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

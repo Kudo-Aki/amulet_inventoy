@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理メニュー - お守り在庫管理</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #8B0000 0%, #B22222 100%);
+            color: white;
+            padding: 16px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .menu-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .menu-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+        .menu-card .icon {
+            font-size: 2.5rem;
+            margin-bottom: 12px;
+        }
+        .menu-card h2 {
+            color: #8B0000;
+            margin-bottom: 8px;
+        }
+        .menu-card p {
+            color: #666;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #8B0000;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .info-box {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        .info-box h3 {
+            color: #856404;
+            margin-bottom: 8px;
+        }
+        .info-box p {
+            color: #856404;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⚙️ 管理メニュー</h1>
+    </div>
+
+    <div class="container">
+        <div class="info-box">
+            <h3>📌 管理者向けページ</h3>
+            <p>商品マスタの編集やQRコードの発行など、管理者向けの機能です。</p>
+        </div>
+
+        <a href="master-editor.html" class="menu-card">
+            <div class="icon">📝</div>
+            <h2>商品マスタ編集</h2>
+            <p>お守りの種類や入数を追加・変更・削除できます。新しいお守りを取り扱う際に使用します。</p>
+        </a>
+
+        <a href="qr-generator.html" class="menu-card">
+            <div class="icon">🏷️</div>
+            <h2>QRコード発行</h2>
+            <p>箱に貼るQRコードを発行します。ラベル印刷に対応しており、複数枚を一括で生成できます。</p>
+        </a>
+
+        <a href="../sample/sample-qr.html" class="menu-card">
+            <div class="icon">🔍</div>
+            <h2>サンプルQRコード</h2>
+            <p>動作確認用のサンプルQRコードを表示します。アプリのテストに使用できます。</p>
+        </a>
+
+        <a href="../test/test.html" class="menu-card">
+            <div class="icon">🧪</div>
+            <h2>動作テスト</h2>
+            <p>アプリの内部ロジック（QRパース、重複検知、集計）が正常に動作するかテストします。</p>
+        </a>
+
+        <a href="../index.html" class="back-link">← アプリに戻る</a>
+    </div>
+</body>
+</html>

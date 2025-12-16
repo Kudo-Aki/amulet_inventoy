@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QRコード発行</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #8B0000 0%, #B22222 100%);
+            color: white;
+            padding: 16px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .section h2 {
+            color: #8B0000;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #8B0000;
+        }
+        .info-box {
+            background: #e3f2fd;
+            border: 1px solid #2196F3;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            color: #1565C0;
+        }
+        .success-box {
+            background: #e8f5e9;
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            color: #2e7d32;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-group label {
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #333;
+        }
+        .form-group small {
+            color: #666;
+            margin-bottom: 4px;
+        }
+        select, input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        select:focus, input:focus {
+            outline: none;
+            border-color: #8B0000;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+        .btn-primary {
+            background: #8B0000;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #6B0000;
+        }
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+        .btn-success {
+            background: #4CAF50;
+            color: white;
+        }
+        .label-options {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .label-option {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .label-option:hover {
+            border-color: #8B0000;
+        }
+        .label-option.selected {
+            border-color: #8B0000;
+            background: #fff5f5;
+        }
+        .label-option .size {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #8B0000;
+        }
+        .label-option .info {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 4px;
+        }
+        .label-option .product-no {
+            font-size: 0.75rem;
+            color: #999;
+            margin-top: 8px;
+        }
+        #qr-preview {
+            display: none;
+            margin-top: 20px;
+        }
+        .print-area {
+            background: white;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        /* A4用紙サイズ（210mm x 297mm）*/
+        .print-sheet {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            background: white;
+            position: relative;
+            page-break-after: always;
+        }
+        /* エーワン 31551: 40mm x 40mm, 24面 (4列 x 6段) */
+        .sheet-31551 {
+            padding-top: 8.5mm;
+            padding-left: 14mm;
+        }
+        .sheet-31551 .qr-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 45mm);
+            grid-template-rows: repeat(6, 45mm);
+        }
+        .sheet-31551 .qr-cell {
+            width: 45mm;
+            height: 45mm;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .sheet-31551 .qr-cell canvas {
+            width: 36mm !important;
+            height: 36mm !important;
+        }
+        .sheet-31551 .qr-cell .qr-label {
+            font-size: 7pt;
+            margin-top: 1mm;
+        }
+        /* エーワン 31553: 30mm x 30mm, 40面 (5列 x 8段) */
+        .sheet-31553 {
+            padding-top: 13.5mm;
+            padding-left: 17.5mm;
+        }
+        .sheet-31553 .qr-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 35mm);
+            grid-template-rows: repeat(8, 33.5mm);
+        }
+        .sheet-31553 .qr-cell {
+            width: 35mm;
+            height: 33.5mm;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .sheet-31553 .qr-cell canvas {
+            width: 26mm !important;
+            height: 26mm !important;
+        }
+        .sheet-31553 .qr-cell .qr-label {
+            font-size: 6pt;
+            margin-top: 1mm;
+        }
+        /* エーワン 31555: 20mm x 20mm, 70面 (7列 x 10段) */
+        .sheet-31555 {
+            padding-top: 12mm;
+            padding-left: 30.5mm;
+        }
+        .sheet-31555 .qr-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 21mm);
+            grid-template-rows: repeat(10, 23mm);
+        }
+        .sheet-31555 .qr-cell {
+            width: 21mm;
+            height: 23mm;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .sheet-31555 .qr-cell canvas {
+            width: 17mm !important;
+            height: 17mm !important;
+        }
+        .sheet-31555 .qr-cell .qr-label {
+            font-size: 5pt;
+            margin-top: 0.5mm;
+        }
+        .qr-label {
+            text-align: center;
+            font-family: monospace;
+            color: #333;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 24px;
+            z-index: 1000;
+            display: none;
+        }
+        .toast.success { background: #4CAF50; }
+        .toast.error { background: #f44336; }
+        .toast.show { display: block; }
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #8B0000;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        .history-table th, .history-table td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .history-table th {
+            background: #f9f9f9;
+        }
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            .print-area, .print-area * {
+                visibility: visible;
+            }
+            .print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                padding: 0;
+                border: none;
+            }
+            .print-sheet {
+                margin: 0;
+                page-break-after: always;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+        @media (max-width: 600px) {
+            .label-options {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏷️ QRコード発行</h1>
+    </div>
+
+    <div class="container">
+        <div class="section">
+            <h2>ラベルシートを選択</h2>
+            <div class="info-box">
+                エーワン製QRコード用ラベルシートに対応しています。<br>
+                お使いのラベルシートの品番を選択してください。
+            </div>
+            <div class="label-options">
+                <div class="label-option selected" data-sheet="31551" onclick="selectSheet('31551')">
+                    <div class="size">40×40mm</div>
+                    <div class="info">24面（4列×6段）</div>
+                    <div class="product-no">品番: 31551</div>
+                </div>
+                <div class="label-option" data-sheet="31553" onclick="selectSheet('31553')">
+                    <div class="size">30×30mm</div>
+                    <div class="info">40面（5列×8段）</div>
+                    <div class="product-no">品番: 31553</div>
+                </div>
+                <div class="label-option" data-sheet="31555" onclick="selectSheet('31555')">
+                    <div class="size">20×20mm</div>
+                    <div class="info">70面（7列×10段）</div>
+                    <div class="product-no">品番: 31555</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>QRコード生成設定</h2>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>商品</label>
+                    <select id="product-select">
+                        <option value="">選択してください</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>年度</label>
+                    <small>西暦下2桁</small>
+                    <input type="number" id="year" value="25" min="20" max="99">
+                </div>
+                <div class="form-group">
+                    <label>開始番号</label>
+                    <small>箱の連番</small>
+                    <input type="number" id="start-number" value="1" min="1">
+                </div>
+                <div class="form-group">
+                    <label>枚数</label>
+                    <small>生成するQRの数</small>
+                    <input type="number" id="count" value="24" min="1" max="200">
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="generateQRCodes()">QRコードを生成</button>
+        </div>
+
+        <div id="qr-preview" class="section">
+            <h2>プレビュー・印刷</h2>
+            <div class="success-box" id="generation-info"></div>
+            <div class="no-print" style="margin-bottom: 16px;">
+                <button class="btn btn-success" onclick="window.print()">🖨️ 印刷</button>
+                <button class="btn btn-secondary" onclick="saveHistory()">📝 発行履歴を保存</button>
+            </div>
+            <div class="print-area" id="print-area">
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>発行履歴</h2>
+            <div class="info-box">
+                過去に発行したQRコードの履歴です。次回の開始番号の参考にしてください。
+            </div>
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>日時</th>
+                        <th>商品</th>
+                        <th>年度</th>
+                        <th>番号範囲</th>
+                        <th>枚数</th>
+                    </tr>
+                </thead>
+                <tbody id="history-tbody">
+                </tbody>
+            </table>
+            <button class="btn btn-secondary" onclick="clearHistory()" style="margin-top: 12px;">履歴をクリア</button>
+        </div>
+
+        <a href="index.html" class="back-link">← 管理メニューに戻る</a>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // デフォルトマスタ
+        const DEFAULT_MASTER = {
+            'HEALTH': { name: '健康守り', quantity: 50 },
+            'MONEY': { name: '金運守り', quantity: 100 },
+            'LOVE': { name: '縁結び守り', quantity: 80 },
+            'TRAFFIC': { name: '交通安全守り', quantity: 60 },
+            'STUDY': { name: '学業成就守り', quantity: 70 },
+            'FAMILY': { name: '家内安全守り', quantity: 50 },
+            'BUSINESS': { name: '商売繁盛守り', quantity: 60 },
+            'CHILD': { name: '子授け守り', quantity: 40 },
+            'RECOVERY': { name: '病気平癒守り', quantity: 50 },
+            'LUCK': { name: '開運守り', quantity: 80 }
+        };
+
+        // ラベルシート設定
+        const SHEET_CONFIG = {
+            '31551': { cols: 4, rows: 6, perSheet: 24 },
+            '31553': { cols: 5, rows: 8, perSheet: 40 },
+            '31555': { cols: 7, rows: 10, perSheet: 70 }
+        };
+
+        let master = {};
+        let selectedSheet = '31551';
+
+        // 初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadMaster();
+            populateProductSelect();
+            loadHistory();
+            updateCountDefault();
+        });
+
+        // マスタ読み込み
+        function loadMaster() {
+            const stored = localStorage.getItem('omamori_master');
+            if (stored) {
+                try {
+                    master = JSON.parse(stored);
+                } catch (e) {
+                    master = { ...DEFAULT_MASTER };
+                }
+            } else {
+                master = { ...DEFAULT_MASTER };
+            }
+        }
+
+        // 商品セレクト生成
+        function populateProductSelect() {
+            const select = document.getElementById('product-select');
+            select.innerHTML = '<option value="">選択してください</option>';
+            Object.keys(master).sort().forEach(code => {
+                const option = document.createElement('option');
+                option.value = code;
+                option.textContent = `${master[code].name}（${code}）`;
+                select.appendChild(option);
+            });
+        }
+
+        // ラベルシート選択
+        function selectSheet(sheetId) {
+            selectedSheet = sheetId;
+            document.querySelectorAll('.label-option').forEach(el => {
+                el.classList.remove('selected');
+            });
+            document.querySelector(`[data-sheet="${sheetId}"]`).classList.add('selected');
+            updateCountDefault();
+        }
+
+        // デフォルト枚数を更新
+        function updateCountDefault() {
+            document.getElementById('count').value = SHEET_CONFIG[selectedSheet].perSheet;
+        }
+
+        // QRコード生成
+        async function generateQRCodes() {
+            const productCode = document.getElementById('product-select').value;
+            const year = document.getElementById('year').value.padStart(2, '0');
+            const startNumber = parseInt(document.getElementById('start-number').value);
+            const count = parseInt(document.getElementById('count').value);
+
+            if (!productCode) {
+                showToast('商品を選択してください', 'error');
+                return;
+            }
+
+            const config = SHEET_CONFIG[selectedSheet];
+            const printArea = document.getElementById('print-area');
+            printArea.innerHTML = '';
+
+            // シートごとに分割
+            const totalSheets = Math.ceil(count / config.perSheet);
+            let qrIndex = 0;
+
+            for (let sheetNum = 0; sheetNum < totalSheets; sheetNum++) {
+                const sheet = document.createElement('div');
+                sheet.className = `print-sheet sheet-${selectedSheet}`;
+                
+                const grid = document.createElement('div');
+                grid.className = 'qr-grid';
+
+                for (let i = 0; i < config.perSheet && qrIndex < count; i++) {
+                    const boxNumber = startNumber + qrIndex;
+                    const qrData = `${productCode}-${year}-${String(boxNumber).padStart(4, '0')}`;
+                    
+                    const cell = document.createElement('div');
+                    cell.className = 'qr-cell';
+                    
+                    const canvas = document.createElement('canvas');
+                    await QRCode.toCanvas(canvas, qrData, {
+                        width: 200,
+                        margin: 1,
+                        errorCorrectionLevel: 'M'
+                    });
+                    
+                    const label = document.createElement('div');
+                    label.className = 'qr-label';
+                    label.textContent = qrData;
+                    
+                    cell.appendChild(canvas);
+                    cell.appendChild(label);
+                    grid.appendChild(cell);
+                    
+                    qrIndex++;
+                }
+
+                sheet.appendChild(grid);
+                printArea.appendChild(sheet);
+            }
+
+            // プレビュー表示
+            document.getElementById('qr-preview').style.display = 'block';
+            document.getElementById('generation-info').innerHTML = `
+                <strong>${master[productCode].name}</strong>のQRコードを<strong>${count}枚</strong>生成しました。<br>
+                番号範囲: ${productCode}-${year}-${String(startNumber).padStart(4, '0')} 〜 ${productCode}-${year}-${String(startNumber + count - 1).padStart(4, '0')}<br>
+                印刷シート数: ${totalSheets}枚（${selectedSheet}用）
+            `;
+
+            showToast(`${count}枚のQRコードを生成しました`, 'success');
+        }
+
+        // 発行履歴を保存
+        function saveHistory() {
+            const productCode = document.getElementById('product-select').value;
+            const year = document.getElementById('year').value.padStart(2, '0');
+            const startNumber = parseInt(document.getElementById('start-number').value);
+            const count = parseInt(document.getElementById('count').value);
+
+            if (!productCode) return;
+
+            const history = JSON.parse(localStorage.getItem('qr_history') || '[]');
+            history.unshift({
+                date: new Date().toLocaleString('ja-JP'),
+                product: master[productCode].name,
+                productCode: productCode,
+                year: year,
+                startNumber: startNumber,
+                endNumber: startNumber + count - 1,
+                count: count
+            });
+
+            // 最大50件まで保存
+            if (history.length > 50) history.pop();
+
+            localStorage.setItem('qr_history', JSON.stringify(history));
+            loadHistory();
+
+            // 次回の開始番号を自動設定
+            document.getElementById('start-number').value = startNumber + count;
+
+            showToast('発行履歴を保存しました', 'success');
+        }
+
+        // 履歴読み込み
+        function loadHistory() {
+            const history = JSON.parse(localStorage.getItem('qr_history') || '[]');
+            const tbody = document.getElementById('history-tbody');
+            tbody.innerHTML = '';
+
+            if (history.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">履歴がありません</td></tr>';
+                return;
+            }
+
+            history.slice(0, 10).forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.date}</td>
+                    <td>${item.product}</td>
+                    <td>${item.year}</td>
+                    <td>${item.startNumber}〜${item.endNumber}</td>
+                    <td>${item.count}枚</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // 履歴クリア
+        function clearHistory() {
+            if (confirm('発行履歴をすべて削除しますか？')) {
+                localStorage.removeItem('qr_history');
+                loadHistory();
+                showToast('履歴を削除しました', 'success');
+            }
+        }
+
+        // トースト表示
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type + ' show';
+            setTimeout(() => {
+                toast.className = 'toast';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
