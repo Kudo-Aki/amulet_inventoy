@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>お守り在庫管理</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- モード選択画面 -->
+    <div id="mode-select-screen" class="screen active">
+        <div class="header">
+            <h1>🏯 お守り在庫管理</h1>
+        </div>
+        <div class="content">
+            <p class="description">作業モードを選択してください</p>
+            <div class="mode-buttons">
+                <button id="btn-delivery" class="mode-btn delivery">
+                    <span class="mode-icon">📦</span>
+                    <span class="mode-title">納品モード</span>
+                    <span class="mode-desc">新しく届いたお守りを登録</span>
+                </button>
+                <button id="btn-inventory" class="mode-btn inventory">
+                    <span class="mode-icon">📋</span>
+                    <span class="mode-title">棚卸モード</span>
+                    <span class="mode-desc">現在の在庫を確認</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- モード確認ダイアログ -->
+    <div id="confirm-dialog" class="dialog-overlay hidden">
+        <div class="dialog">
+            <div class="dialog-header" id="dialog-mode-indicator"></div>
+            <div class="dialog-content">
+                <p id="dialog-message"></p>
+            </div>
+            <div class="dialog-buttons">
+                <button id="btn-confirm-cancel" class="btn-cancel">キャンセル</button>
+                <button id="btn-confirm-ok" class="btn-ok">開始する</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- QR読み取り画面 -->
+    <div id="scan-screen" class="screen">
+        <div class="header">
+            <div class="mode-indicator" id="current-mode-indicator"></div>
+            <button id="btn-back-to-mode" class="btn-header">戻る</button>
+        </div>
+        <div class="content scan-content">
+            <div id="qr-reader"></div>
+            <div id="scan-result" class="scan-result">
+                <div id="last-scan" class="last-scan"></div>
+            </div>
+            <div id="scan-list-container">
+                <div class="scan-list-header">
+                    <span>読み取り済み: <strong id="scan-count">0</strong>箱</span>
+                    <button id="btn-toggle-list" class="btn-small">一覧表示</button>
+                </div>
+                <div id="scan-list" class="scan-list hidden"></div>
+            </div>
+            <div class="scan-actions">
+                <button id="btn-finish-scan" class="btn-primary">読み取り終了</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 重複警告ダイアログ -->
+    <div id="duplicate-dialog" class="dialog-overlay hidden">
+        <div class="dialog warning">
+            <div class="dialog-header warning">⚠️ 重複検知</div>
+            <div class="dialog-content">
+                <p id="duplicate-message"></p>
+                <p class="warning-note">この箱はすでに登録されています。<br>数量は増えません。</p>
+            </div>
+            <div class="dialog-buttons">
+                <button id="btn-duplicate-ok" class="btn-ok">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 集計・確認画面 -->
+    <div id="summary-screen" class="screen">
+        <div class="header">
+            <h2>集計結果</h2>
+            <div class="mode-indicator" id="summary-mode-indicator"></div>
+        </div>
+        <div class="content">
+            <div class="summary-info">
+                <p>読み取り日時: <span id="summary-datetime"></span></p>
+                <p>総箱数: <strong id="summary-total-boxes">0</strong>箱</p>
+                <p>総数量: <strong id="summary-total-quantity">0</strong>体</p>
+            </div>
+            <div class="summary-table-container">
+                <table id="summary-table" class="summary-table">
+                    <thead>
+                        <tr>
+                            <th>商品名</th>
+                            <th>箱数</th>
+                            <th>入数</th>
+                            <th>合計</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summary-tbody"></tbody>
+                </table>
+            </div>
+            <div class="summary-actions">
+                <button id="btn-export-csv" class="btn-primary">CSV出力</button>
+                <button id="btn-new-session" class="btn-secondary">新規セッション</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 読み取り成功トースト -->
+    <div id="success-toast" class="toast hidden">
+        <span id="toast-message"></span>
+    </div>
+
+    <!-- スクリプト読み込み -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

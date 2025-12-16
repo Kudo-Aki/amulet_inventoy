@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>お守り在庫管理アプリ - ユニットテスト</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .pass { background: #d4edda; color: #155724; }
+        .fail { background: #f8d7da; color: #721c24; }
+        h1 { color: #8B0000; }
+        h2 { margin-top: 30px; border-bottom: 2px solid #8B0000; padding-bottom: 5px; }
+    </style>
+</head>
+<body>
+    <h1>お守り在庫管理アプリ - ユニットテスト</h1>
+    <div id="results"></div>
+
+    <script>
+        // テスト結果表示
+        const results = document.getElementById('results');
+        let passCount = 0;
+        let failCount = 0;
+
+        function test(name, fn) {
+            const div = document.createElement('div');
+            div.className = 'test-result';
+            try {
+                fn();
+                div.className += ' pass';
+                div.textContent = '✓ ' + name;
+                passCount++;
+            } catch (e) {
+                div.className += ' fail';
+                div.textContent = '✗ ' + name + ': ' + e.message;
+                failCount++;
+            }
+            results.appendChild(div);
+        }
+
+        function assertEqual(actual, expected, message) {
+            if (actual !== expected) {
+                throw new Error(message + ' (expected: ' + expected + ', actual: ' + actual + ')');
+            }
+        }
+
+        function assertTrue(value, message) {
+            if (!value) {
+                throw new Error(message);
+            }
+        }
+
+        function assertFalse(value, message) {
+            if (value) {
+                throw new Error(message);
+            }
+        }
+
+        // ========================================
+        // テスト対象の関数（app.jsから抜粋）
+        // ========================================
+
+        function parseQrCode(qrCode) {
+            const regex = /^([A-Z]+)-(\d{2})-(\d{3})$/;
+            const match = qrCode.match(regex);
+            if (!match) return null;
+            return {
+                productCode: match[1],
+                year: match[2],
+                boxNumber: match[3]
+            };
+        }
+
+        // セッションデータ（テスト用）
+        let testSession = {
+            scannedBoxes: []
+        };
+
+        function checkDuplicate(qrCode) {
+            return testSession.scannedBoxes.some(box => box.qrCode === qrCode);
+        }
+
+        // ========================================
+        // テスト実行
+        // ========================================
+
+        // セクション: QRコードパース
+        const h2_1 = document.createElement('h2');
+        h2_1.textContent = 'QRコードパース';
+        results.appendChild(h2_1);
+
+        test('正常なQRコード（HEALTH-25-001）をパースできる', () => {
+            const result = parseQrCode('HEALTH-25-001');
+            assertEqual(result.productCode, 'HEALTH', '商品コード');
+            assertEqual(result.year, '25', '年度');
+            assertEqual(result.boxNumber, '001', '箱連番');
+        });
+
+        test('正常なQRコード（MONEY-25-999）をパースできる', () => {
+            const result = parseQrCode('MONEY-25-999');
+            assertEqual(result.productCode, 'MONEY', '商品コード');
+            assertEqual(result.year, '25', '年度');
+            assertEqual(result.boxNumber, '999', '箱連番');
+        });
+
+        test('不正なQRコード（小文字）はnullを返す', () => {
+            const result = parseQrCode('health-25-001');
+            assertEqual(result, null, '小文字は無効');
+        });
+
+        test('不正なQRコード（桁数不足）はnullを返す', () => {
+            const result = parseQrCode('HEALTH-25-01');
+            assertEqual(result, null, '2桁連番は無効');
+        });
+
+        test('不正なQRコード（区切り文字なし）はnullを返す', () => {
+            const result = parseQrCode('HEALTH25001');
+            assertEqual(result, null, '区切りなしは無効');
+        });
+
+        test('不正なQRコード（空文字）はnullを返す', () => {
+            const result = parseQrCode('');
+            assertEqual(result, null, '空文字は無効');
+        });
+
+        // セクション: 重複検知
+        const h2_2 = document.createElement('h2');
+        h2_2.textContent = '重複検知';
+        results.appendChild(h2_2);
+
+        test('空のセッションでは重複なし', () => {
+            testSession.scannedBoxes = [];
+            const result = checkDuplicate('HEALTH-25-001');
+            assertFalse(result, '空セッションは重複なし');
+        });
+
+        test('未登録のQRコードは重複なし', () => {
+            testSession.scannedBoxes = [
+                { qrCode: 'HEALTH-25-001' },
+                { qrCode: 'MONEY-25-001' }
+            ];
+            const result = checkDuplicate('HEALTH-25-002');
+            assertFalse(result, '未登録は重複なし');
+        });
+
+        test('登録済みのQRコードは重複あり', () => {
+            testSession.scannedBoxes = [
+                { qrCode: 'HEALTH-25-001' },
+                { qrCode: 'MONEY-25-001' }
+            ];
+            const result = checkDuplicate('HEALTH-25-001');
+            assertTrue(result, '登録済みは重複あり');
+        });
+
+        test('同一商品・別箱は重複なし', () => {
+            testSession.scannedBoxes = [
+                { qrCode: 'HEALTH-25-001' }
+            ];
+            const result = checkDuplicate('HEALTH-25-002');
+            assertFalse(result, '別箱は重複なし');
+        });
+
+        // セクション: 集計ロジック
+        const h2_3 = document.createElement('h2');
+        h2_3.textContent = '集計ロジック';
+        results.appendChild(h2_3);
+
+        const productMaster = {
+            'HEALTH': { name: '健康守り', quantity: 50 },
+            'MONEY': { name: '金運守り', quantity: 100 }
+        };
+
+        function calculateSummary(scannedBoxes) {
+            const productCounts = {};
+            scannedBoxes.forEach(box => {
+                if (!productCounts[box.productCode]) {
+                    productCounts[box.productCode] = {
+                        code: box.productCode,
+                        name: box.productName,
+                        boxes: 0
+                    };
+                }
+                productCounts[box.productCode].boxes++;
+            });
+
+            const products = Object.values(productCounts).map(product => {
+                const master = productMaster[product.code];
+                const unitQuantity = master ? master.quantity : 0;
+                return {
+                    code: product.code,
+                    name: product.name,
+                    boxes: product.boxes,
+                    unitQuantity: unitQuantity,
+                    totalQuantity: product.boxes * unitQuantity
+                };
+            });
+
+            const totalBoxes = products.reduce((sum, p) => sum + p.boxes, 0);
+            const totalQuantity = products.reduce((sum, p) => sum + p.totalQuantity, 0);
+
+            return { products, totalBoxes, totalQuantity };
+        }
+
+        test('単一商品の集計が正しい', () => {
+            const boxes = [
+                { qrCode: 'HEALTH-25-001', productCode: 'HEALTH', productName: '健康守り' },
+                { qrCode: 'HEALTH-25-002', productCode: 'HEALTH', productName: '健康守り' }
+            ];
+            const result = calculateSummary(boxes);
+            assertEqual(result.totalBoxes, 2, '総箱数');
+            assertEqual(result.totalQuantity, 100, '総数量（50×2）');
+        });
+
+        test('複数商品の集計が正しい', () => {
+            const boxes = [
+                { qrCode: 'HEALTH-25-001', productCode: 'HEALTH', productName: '健康守り' },
+                { qrCode: 'MONEY-25-001', productCode: 'MONEY', productName: '金運守り' },
+                { qrCode: 'HEALTH-25-002', productCode: 'HEALTH', productName: '健康守り' }
+            ];
+            const result = calculateSummary(boxes);
+            assertEqual(result.totalBoxes, 3, '総箱数');
+            assertEqual(result.totalQuantity, 200, '総数量（50×2 + 100×1）');
+        });
+
+        test('空の箱リストの集計が正しい', () => {
+            const boxes = [];
+            const result = calculateSummary(boxes);
+            assertEqual(result.totalBoxes, 0, '総箱数');
+            assertEqual(result.totalQuantity, 0, '総数量');
+        });
+
+        // 結果サマリー
+        const summary = document.createElement('h2');
+        summary.textContent = '結果サマリー';
+        results.appendChild(summary);
+
+        const summaryDiv = document.createElement('div');
+        summaryDiv.className = 'test-result ' + (failCount === 0 ? 'pass' : 'fail');
+        summaryDiv.textContent = `合計: ${passCount + failCount}件, 成功: ${passCount}件, 失敗: ${failCount}件`;
+        results.appendChild(summaryDiv);
+    </script>
+</body>
+</html>

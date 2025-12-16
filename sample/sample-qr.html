@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>サンプルQRコード生成</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            text-align: center;
+            color: #8B0000;
+            margin-bottom: 20px;
+        }
+        .description {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .qr-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .qr-card {
+            background: white;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .qr-card img {
+            width: 150px;
+            height: 150px;
+            margin-bottom: 12px;
+        }
+        .qr-code {
+            font-family: monospace;
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .product-name {
+            font-size: 12px;
+            color: #666;
+        }
+        .section-title {
+            text-align: center;
+            color: #333;
+            margin: 40px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #8B0000;
+        }
+        .note {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 30px auto;
+            max-width: 800px;
+        }
+        .note h3 {
+            color: #856404;
+            margin-bottom: 8px;
+        }
+        .note p {
+            color: #856404;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        @media print {
+            body {
+                background: white;
+            }
+            .note {
+                display: none;
+            }
+            .qr-card {
+                box-shadow: none;
+                border: 1px solid #ddd;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>🏯 サンプルQRコード</h1>
+    <p class="description">動作確認用のサンプルQRコードです。画面に表示してスマホでスキャンしてください。</p>
+    
+    <div class="note">
+        <h3>📱 使い方</h3>
+        <p>
+            1. このページをPCまたは別のスマホで開きます<br>
+            2. お守り在庫管理アプリを起動し、モードを選択します<br>
+            3. 下のQRコードをスキャンして動作を確認します<br>
+            4. 同じQRを2回スキャンすると「重複警告」が表示されます
+        </p>
+    </div>
+
+    <h2 class="section-title">健康守り（HEALTH）</h2>
+    <div class="qr-grid" id="health-qr"></div>
+
+    <h2 class="section-title">金運守り（MONEY）</h2>
+    <div class="qr-grid" id="money-qr"></div>
+
+    <h2 class="section-title">縁結び守り（LOVE）</h2>
+    <div class="qr-grid" id="love-qr"></div>
+
+    <h2 class="section-title">交通安全守り（TRAFFIC）</h2>
+    <div class="qr-grid" id="traffic-qr"></div>
+
+    <h2 class="section-title">学業成就守り（STUDY）</h2>
+    <div class="qr-grid" id="study-qr"></div>
+
+    <script>
+        // QRコード生成（QuickChart API使用）
+        const products = [
+            { code: 'HEALTH', name: '健康守り', container: 'health-qr' },
+            { code: 'MONEY', name: '金運守り', container: 'money-qr' },
+            { code: 'LOVE', name: '縁結び守り', container: 'love-qr' },
+            { code: 'TRAFFIC', name: '交通安全守り', container: 'traffic-qr' },
+            { code: 'STUDY', name: '学業成就守り', container: 'study-qr' }
+        ];
+
+        const year = '25'; // 2025年
+        const boxCount = 3; // 各商品3箱分
+
+        products.forEach(product => {
+            const container = document.getElementById(product.container);
+            
+            for (let i = 1; i <= boxCount; i++) {
+                const boxNumber = String(i).padStart(3, '0');
+                const qrCode = `${product.code}-${year}-${boxNumber}`;
+                
+                const card = document.createElement('div');
+                card.className = 'qr-card';
+                card.innerHTML = `
+                    <img src="https://quickchart.io/qr?text=${encodeURIComponent(qrCode)}&size=150" alt="${qrCode}">
+                    <div class="qr-code">${qrCode}</div>
+                    <div class="product-name">${product.name} 第${i}箱</div>
+                `;
+                container.appendChild(card);
+            }
+        });
+    </script>
+</body>
+</html>
