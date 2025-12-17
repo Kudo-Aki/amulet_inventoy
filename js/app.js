@@ -4,9 +4,10 @@
  * 機能:
  * - モード選択（納品/棚卸）
  * - QRコード連続読み取り
+ * - 読み取り確認画面
  * - 重複検知・警告
  * - 商品別集計
- * - CSV出力
+ * - CSV出力（ダウンロード＆メール送信）
  */
 
 // ========================================
@@ -40,6 +41,13 @@ let html5QrcodeScanner = null;
 
 // 商品マスタ
 let productMaster = { ...DEFAULT_MASTER };
+
+// スキャン一時停止フラグ（確認画面表示中）
+let scanPaused = false;
+
+// 最後にスキャンしたQRコード（連続読み取り防止）
+let lastScannedQr = null;
+let lastScanTime = 0;
 
 // ========================================
 // DOM要素の取得
@@ -98,6 +106,8 @@ const elements = {
 document.addEventListener('DOMContentLoaded', () => {
     initEventListeners();
     loadMasterFromStorage();
+    createScanConfirmDialog();
+    createEmailDialog();
 });
 
 function initEventListeners() {
@@ -118,8 +128,137 @@ function initEventListeners() {
     elements.btnDuplicateOk.addEventListener('click', hideDuplicateDialog);
     
     // 集計画面
-    elements.btnExportCsv.addEventListener('click', exportCsv);
+    elements.btnExportCsv.addEventListener('click', showExportOptions);
     elements.btnNewSession.addEventListener('click', startNewSession);
+}
+
+// ========================================
+// 読み取り確認ダイアログの作成
+// ========================================
+
+function createScanConfirmDialog() {
+    const dialog = document.createElement('div');
+    dialog.id = 'scan-confirm-dialog';
+    dialog.className = 'dialog-overlay hidden';
+    dialog.innerHTML = `
+        <div class="dialog" style="max-width: 350px;">
+            <div class="dialog-header" style="background: #4CAF50; color: white; padding: 16px; text-align: center;">
+                <span style="font-size: 2rem;">📦</span>
+                <div style="font-size: 1.2rem; font-weight: bold; margin-top: 8px;">読み取り確認</div>
+            </div>
+            <div class="dialog-body" style="padding: 20px; text-align: center;">
+                <div id="scan-confirm-product" style="font-size: 1.5rem; font-weight: bold; color: #8B0000; margin-bottom: 12px;"></div>
+                <div id="scan-confirm-qr" style="font-family: monospace; font-size: 1rem; color: #666; margin-bottom: 8px;"></div>
+                <div id="scan-confirm-quantity" style="font-size: 0.9rem; color: #999;"></div>
+            </div>
+            <div class="dialog-footer" style="display: flex; gap: 12px; padding: 16px;">
+                <button id="btn-scan-cancel" class="btn btn-secondary" style="flex: 1; padding: 14px; font-size: 1rem;">キャンセル</button>
+                <button id="btn-scan-register" class="btn btn-primary" style="flex: 1; padding: 14px; font-size: 1rem; background: #4CAF50;">登録する</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(dialog);
+    
+    // イベントリスナー
+    document.getElementById('btn-scan-cancel').addEventListener('click', cancelScanConfirm);
+    document.getElementById('btn-scan-register').addEventListener('click', confirmScanRegister);
+}
+
+// 確認ダイアログ用の一時データ
+let pendingScanData = null;
+
+function showScanConfirmDialog(scanData) {
+    pendingScanData = scanData;
+    scanPaused = true;
+    
+    const product = productMaster[scanData.productCode];
+    const quantity = product ? product.quantity : '不明';
+    
+    document.getElementById('scan-confirm-product').textContent = scanData.productName;
+    document.getElementById('scan-confirm-qr').textContent = scanData.qrCode;
+    document.getElementById('scan-confirm-quantity').textContent = `入数: ${quantity}個/箱`;
+    
+    document.getElementById('scan-confirm-dialog').classList.remove('hidden');
+    
+    // 振動フィードバック
+    if (navigator.vibrate) {
+        navigator.vibrate(50);
+    }
+}
+
+function cancelScanConfirm() {
+    document.getElementById('scan-confirm-dialog').classList.add('hidden');
+    pendingScanData = null;
+    scanPaused = false;
+}
+
+function confirmScanRegister() {
+    if (pendingScanData) {
+        // セッションに追加
+        session.scannedBoxes.push(pendingScanData);
+        
+        // UI更新
+        updateScanUI(pendingScanData);
+        showSuccessToast(`${pendingScanData.productName} を登録しました`);
+    }
+    
+    document.getElementById('scan-confirm-dialog').classList.add('hidden');
+    pendingScanData = null;
+    scanPaused = false;
+}
+
+// ========================================
+// メール送信ダイアログの作成
+// ========================================
+
+function createEmailDialog() {
+    const dialog = document.createElement('div');
+    dialog.id = 'email-dialog';
+    dialog.className = 'dialog-overlay hidden';
+    dialog.innerHTML = `
+        <div class="dialog" style="max-width: 400px;">
+            <div class="dialog-header" style="background: #8B0000; color: white; padding: 16px; text-align: center;">
+                <span style="font-size: 1.5rem;">📧</span>
+                <div style="font-size: 1.1rem; font-weight: bold; margin-top: 4px;">CSV出力</div>
+            </div>
+            <div class="dialog-body" style="padding: 20px;">
+                <div style="margin-bottom: 20px;">
+                    <button id="btn-download-csv" class="btn btn-primary" style="width: 100%; padding: 14px; font-size: 1rem; margin-bottom: 12px;">
+                        📥 ダウンロード
+                    </button>
+                    <p style="font-size: 0.85rem; color: #666; text-align: center;">CSVファイルを端末にダウンロードします</p>
+                </div>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                <div>
+                    <label style="font-weight: bold; display: block; margin-bottom: 8px;">📧 メールで送信</label>
+                    <input type="email" id="email-address" placeholder="example@email.com" 
+                           style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 12px;">
+                    <button id="btn-send-email" class="btn btn-secondary" style="width: 100%; padding: 14px; font-size: 1rem;">
+                        ✉️ メールで送信
+                    </button>
+                    <p style="font-size: 0.85rem; color: #666; text-align: center; margin-top: 8px;">メールアプリが開きます</p>
+                </div>
+            </div>
+            <div class="dialog-footer" style="padding: 16px; border-top: 1px solid #eee;">
+                <button id="btn-close-email-dialog" class="btn btn-secondary" style="width: 100%; padding: 12px;">閉じる</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(dialog);
+    
+    // イベントリスナー
+    document.getElementById('btn-download-csv').addEventListener('click', () => {
+        exportCsvDownload();
+        document.getElementById('email-dialog').classList.add('hidden');
+    });
+    document.getElementById('btn-send-email').addEventListener('click', sendCsvByEmail);
+    document.getElementById('btn-close-email-dialog').addEventListener('click', () => {
+        document.getElementById('email-dialog').classList.add('hidden');
+    });
+}
+
+function showExportOptions() {
+    document.getElementById('email-dialog').classList.remove('hidden');
 }
 
 // ========================================
@@ -167,6 +306,9 @@ function startSession() {
     session.startTime = new Date();
     session.scannedBoxes = [];
     session.duplicateAttempts = [];
+    lastScannedQr = null;
+    lastScanTime = 0;
+    scanPaused = false;
     
     // UI更新
     const modeText = session.mode === 'delivery' ? '📦 納品モード' : '📋 棚卸モード';
@@ -235,6 +377,19 @@ function stopQrScanner() {
 }
 
 function onScanSuccess(decodedText, decodedResult) {
+    // 確認画面表示中はスキャンを無視
+    if (scanPaused) {
+        return;
+    }
+    
+    // 同じQRコードの連続読み取り防止（1.5秒以内）
+    const now = Date.now();
+    if (decodedText === lastScannedQr && (now - lastScanTime) < 1500) {
+        return;
+    }
+    lastScannedQr = decodedText;
+    lastScanTime = now;
+    
     // QRコードのパース
     const parsed = parseQrCode(decodedText);
     
@@ -253,7 +408,7 @@ function onScanSuccess(decodedText, decodedResult) {
     const product = productMaster[parsed.productCode];
     const productName = product ? product.name : `不明(${parsed.productCode})`;
     
-    // セッションに追加
+    // スキャンデータ作成
     const scanData = {
         qrCode: decodedText,
         productCode: parsed.productCode,
@@ -262,11 +417,9 @@ function onScanSuccess(decodedText, decodedResult) {
         productName: productName,
         timestamp: new Date().toISOString()
     };
-    session.scannedBoxes.push(scanData);
     
-    // UI更新
-    updateScanUI(scanData);
-    showSuccessToast(`${productName} を登録しました`);
+    // 確認画面を表示
+    showScanConfirmDialog(scanData);
 }
 
 function onScanFailure(error) {
@@ -278,9 +431,9 @@ function onScanFailure(error) {
 // ========================================
 
 function parseQrCode(qrCode) {
-    // フォーマット: [商品コード]-[年度(2桁)]-[箱連番(3桁)]
-    // 例: HEALTH-25-001
-    const regex = /^([A-Z]+)-(\d{2})-(\d{3})$/;
+    // フォーマット: [商品コード]-[年度(2桁)]-[箱連番(3〜4桁)]
+    // 例: HEALTH-25-001 または HEALTH-25-0001
+    const regex = /^([A-Z]+)-(\d{2})-(\d{3,4})$/;
     const match = qrCode.match(regex);
     
     if (!match) {
@@ -330,6 +483,22 @@ function hideDuplicateDialog() {
 }
 
 // ========================================
+// エラー表示
+// ========================================
+
+function showScanError(message, qrCode) {
+    elements.lastScan.innerHTML = `
+        <span style="color:#F44336">${message}</span>
+        <span class="qr-code" style="font-size:0.8rem">${qrCode}</span>
+    `;
+    elements.lastScan.className = 'last-scan error';
+    
+    if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200]);
+    }
+}
+
+// ========================================
 // UI更新
 // ========================================
 
@@ -348,53 +517,41 @@ function updateScanUI(scanData) {
     const listItem = document.createElement('div');
     listItem.className = 'scan-list-item';
     listItem.innerHTML = `
-        <span class="product">${scanData.productName}</span>
-        <span class="qr">${scanData.qrCode}</span>
+        <span class="product-name">${scanData.productName}</span>
+        <span class="qr-code">${scanData.qrCode}</span>
     `;
     elements.scanList.insertBefore(listItem, elements.scanList.firstChild);
 }
 
-function showScanError(message, qrCode) {
-    elements.lastScan.innerHTML = `
-        <span style="color:#F44336">${message}</span>
-        <span class="qr-code">${qrCode}</span>
-    `;
-    elements.lastScan.className = 'last-scan error';
-}
-
 function toggleScanList() {
-    const isHidden = elements.scanList.classList.contains('hidden');
-    if (isHidden) {
-        elements.scanList.classList.remove('hidden');
-        elements.btnToggleList.textContent = '一覧を閉じる';
-    } else {
-        elements.scanList.classList.add('hidden');
-        elements.btnToggleList.textContent = '一覧表示';
-    }
+    const isHidden = elements.scanList.classList.toggle('hidden');
+    elements.btnToggleList.textContent = isHidden ? '一覧表示' : '一覧を隠す';
 }
 
 function showSuccessToast(message) {
     elements.toastMessage.textContent = message;
-    elements.successToast.className = 'toast success';
+    elements.successToast.classList.add('show');
     
     setTimeout(() => {
-        elements.successToast.classList.add('hidden');
+        elements.successToast.classList.remove('show');
     }, 2000);
 }
 
 // ========================================
-// 集計・終了処理
+// 読み取り終了・集計
 // ========================================
 
 function finishScan() {
     if (session.scannedBoxes.length === 0) {
-        alert('読み取りデータがありません');
+        alert('まだ何もスキャンされていません');
         return;
     }
     
     stopQrScanner();
-    
-    // 集計
+    showSummary();
+}
+
+function showSummary() {
     const summary = calculateSummary();
     
     // UI更新
@@ -458,9 +615,8 @@ function calculateSummary() {
 // CSV出力
 // ========================================
 
-function exportCsv() {
+function generateCsvContent() {
     const summary = calculateSummary();
-    const modeText = session.mode === 'delivery' ? '納品' : '棚卸';
     
     // CSVヘッダー
     let csv = '\uFEFF'; // BOM for Excel
@@ -474,14 +630,71 @@ function exportCsv() {
     // 合計行
     csv += `合計,,${summary.totalBoxes},,${summary.totalQuantity}\n`;
     
-    // ファイル名生成
+    return csv;
+}
+
+function generateCsvFilename() {
     const dateStr = formatDateTimeForFilename(session.startTime);
-    const filename = `omamori_${session.mode}_${dateStr}.csv`;
+    return `omamori_${session.mode}_${dateStr}.csv`;
+}
+
+function exportCsvDownload() {
+    const csv = generateCsvContent();
+    const filename = generateCsvFilename();
     
     // ダウンロード
     downloadFile(csv, filename, 'text/csv;charset=utf-8');
     
-    showSuccessToast('CSVを出力しました');
+    showSuccessToast('CSVをダウンロードしました');
+}
+
+function sendCsvByEmail() {
+    const emailAddress = document.getElementById('email-address').value.trim();
+    
+    if (!emailAddress) {
+        alert('メールアドレスを入力してください');
+        return;
+    }
+    
+    // メールアドレスの簡易バリデーション
+    if (!emailAddress.includes('@')) {
+        alert('正しいメールアドレスを入力してください');
+        return;
+    }
+    
+    const summary = calculateSummary();
+    const modeText = session.mode === 'delivery' ? '納品' : '棚卸';
+    const dateStr = formatDateTime(session.startTime);
+    
+    // メール本文を作成
+    const subject = encodeURIComponent(`【お守り在庫管理】${modeText}結果 ${dateStr}`);
+    
+    let body = `お守り在庫管理 ${modeText}結果\n`;
+    body += `日時: ${dateStr}\n\n`;
+    body += `【集計結果】\n`;
+    body += `総箱数: ${summary.totalBoxes}箱\n`;
+    body += `総数量: ${summary.totalQuantity}個\n\n`;
+    body += `【商品別内訳】\n`;
+    
+    summary.products.forEach(product => {
+        body += `${product.name}: ${product.boxes}箱 × ${product.unitQuantity}個 = ${product.totalQuantity}個\n`;
+    });
+    
+    body += `\n---\n`;
+    body += `※ CSVファイルが必要な場合は、アプリから直接ダウンロードしてください。\n`;
+    
+    const encodedBody = encodeURIComponent(body);
+    
+    // メールアプリを開く
+    window.location.href = `mailto:${emailAddress}?subject=${subject}&body=${encodedBody}`;
+    
+    document.getElementById('email-dialog').classList.add('hidden');
+    showSuccessToast('メールアプリを開きました');
+}
+
+// 従来のexportCsv関数（互換性のため残す）
+function exportCsv() {
+    showExportOptions();
 }
 
 function downloadFile(content, filename, mimeType) {
