@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>使い方マニュアル - お守り在庫管理</title>
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #8B0000, #B22222);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .header h1 {
+            font-size: 1.3rem;
+            margin-bottom: 4px;
+        }
+        
+        .header p {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+        
+        .back-link {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: white;
+            text-decoration: none;
+            font-size: 1.5rem;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 16px;
+        }
+        
+        .toc {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .toc h2 {
+            font-size: 1.1rem;
+            color: #8B0000;
+            margin-bottom: 12px;
+            border-bottom: 2px solid #8B0000;
+            padding-bottom: 8px;
+        }
+        
+        .toc ul {
+            list-style: none;
+        }
+        
+        .toc li {
+            margin-bottom: 8px;
+        }
+        
+        .toc a {
+            color: #333;
+            text-decoration: none;
+            display: block;
+            padding: 10px 12px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border-left: 4px solid #8B0000;
+        }
+        
+        .toc a:hover {
+            background: #f0f0f0;
+        }
+        
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .section h2 {
+            font-size: 1.2rem;
+            color: #8B0000;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #8B0000;
+        }
+        
+        .section h3 {
+            font-size: 1rem;
+            color: #333;
+            margin: 16px 0 8px;
+        }
+        
+        .section p {
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+        
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 16px;
+            padding: 12px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        
+        .step-number {
+            background: #8B0000;
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+            margin-right: 12px;
+        }
+        
+        .step-content {
+            flex: 1;
+        }
+        
+        .step-content strong {
+            display: block;
+            margin-bottom: 4px;
+            color: #8B0000;
+        }
+        
+        .screenshot {
+            width: 100%;
+            max-width: 280px;
+            margin: 16px auto;
+            display: block;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border: 1px solid #ddd;
+        }
+        
+        .screenshot-caption {
+            text-align: center;
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .tip {
+            background: #FFF8E1;
+            border-left: 4px solid #FFC107;
+            padding: 12px;
+            margin: 16px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .tip strong {
+            color: #F57C00;
+        }
+        
+        .warning {
+            background: #FFEBEE;
+            border-left: 4px solid #F44336;
+            padding: 12px;
+            margin: 16px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .warning strong {
+            color: #D32F2F;
+        }
+        
+        .button-example {
+            display: inline-block;
+            padding: 8px 16px;
+            background: #8B0000;
+            color: white;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            margin: 4px;
+        }
+        
+        .button-example.secondary {
+            background: #666;
+        }
+        
+        .button-example.green {
+            background: #4CAF50;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <a href="../" class="back-link">←</a>
+        <h1>📖 使い方マニュアル</h1>
+        <p>お守り在庫管理アプリ</p>
+    </header>
+    
+    <div class="container">
+        <!-- 目次 -->
+        <nav class="toc">
+            <h2>📋 目次</h2>
+            <ul>
+                <li><a href="#overview">1. アプリの概要</a></li>
+                <li><a href="#inventory">2. 棚卸の手順</a></li>
+                <li><a href="#delivery">3. 納品登録の手順</a></li>
+                <li><a href="#export">4. CSV出力・共有</a></li>
+                <li><a href="#master">5. 商品マスタの編集</a></li>
+                <li><a href="#qr">6. QRコードの発行</a></li>
+                <li><a href="#faq">7. よくある質問</a></li>
+            </ul>
+        </nav>
+        
+        <!-- 1. アプリの概要 -->
+        <section class="section" id="overview">
+            <h2>1. アプリの概要</h2>
+            <p>このアプリは、お守りの在庫管理を簡単に行うためのツールです。</p>
+            <p>箱に貼られたQRコードをスマホで読み取るだけで、在庫の確認や納品の登録ができます。</p>
+            
+            <h3>主な機能</h3>
+            <div class="step">
+                <div class="step-number">📋</div>
+                <div class="step-content">
+                    <strong>棚卸モード</strong>
+                    現在の在庫を確認するときに使います
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-number">📦</div>
+                <div class="step-content">
+                    <strong>納品モード</strong>
+                    新しく届いたお守りを登録するときに使います
+                </div>
+            </div>
+            
+            <img src="images/01_mode_select.png" alt="モード選択画面" class="screenshot">
+            <p class="screenshot-caption">▲ アプリを開くとこの画面が表示されます</p>
+        </section>
+        
+        <!-- 2. 棚卸の手順 -->
+        <section class="section" id="inventory">
+            <h2>2. 棚卸の手順</h2>
+            
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <strong>「棚卸モード」をタップ</strong>
+                    青いボタンをタップします
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <strong>確認画面で「開始する」をタップ</strong>
+                    内容を確認して開始します
+                </div>
+            </div>
+            
+            <img src="images/03_inventory_confirm.png" alt="棚卸確認画面" class="screenshot">
+            <p class="screenshot-caption">▲ 確認画面が表示されます</p>
+            
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <strong>QRコードを読み取る</strong>
+                    カメラが起動するので、箱のQRコードをかざします
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                    <strong>確認画面で「登録する」をタップ</strong>
+                    読み取った内容を確認して登録します
+                </div>
+            </div>
+            
+            <div class="tip">
+                <strong>💡 ヒント</strong><br>
+                同じQRコードを2回読み取ると「重複検知」の警告が出ます。数量が二重にカウントされることはありません。
+            </div>
+            
+            <div class="step">
+                <div class="step-number">5</div>
+                <div class="step-content">
+                    <strong>すべて読み取ったら「読み取り終了」をタップ</strong>
+                    集計結果が表示されます
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">6</div>
+                <div class="step-content">
+                    <strong>「CSV出力」で結果を保存・共有</strong>
+                    ダウンロードまたはLINE等で共有できます
+                </div>
+            </div>
+        </section>
+        
+        <!-- 3. 納品登録の手順 -->
+        <section class="section" id="delivery">
+            <h2>3. 納品登録の手順</h2>
+            <p>基本的な流れは棚卸と同じです。</p>
+            
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <strong>「納品モード」をタップ</strong>
+                    赤いボタンをタップします
+                </div>
+            </div>
+            
+            <img src="images/02_confirm_dialog.png" alt="納品確認画面" class="screenshot">
+            <p class="screenshot-caption">▲ 納品モードの確認画面</p>
+            
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <strong>届いた箱のQRコードを読み取る</strong>
+                    1箱ずつ読み取っていきます
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <strong>「読み取り終了」→「CSV出力」</strong>
+                    結果を保存・共有します
+                </div>
+            </div>
+        </section>
+        
+        <!-- 4. CSV出力・共有 -->
+        <section class="section" id="export">
+            <h2>4. CSV出力・共有</h2>
+            <p>読み取り結果は2つの方法で出力できます。</p>
+            
+            <h3>📥 ダウンロード</h3>
+            <p>CSVファイルをスマホに保存します。後からExcelなどで開けます。</p>
+            
+            <h3>📤 共有する</h3>
+            <p>LINE、メール、AirDropなどで送信できます。CSVファイルと集計結果のテキストが一緒に送られます。</p>
+            
+            <div class="tip">
+                <strong>💡 おすすめ</strong><br>
+                「共有する」を使うと、LINEで簡単に結果を送れます。CSVファイルも添付されるので便利です。
+            </div>
+        </section>
+        
+        <!-- 5. 商品マスタの編集 -->
+        <section class="section" id="master">
+            <h2>5. 商品マスタの編集</h2>
+            <p>新しいお守りを追加したり、入数を変更できます。</p>
+            
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <strong>右上の ⚙️ をタップ</strong>
+                    管理メニューが開きます
+                </div>
+            </div>
+            
+            <img src="images/04_admin_menu.png" alt="管理メニュー" class="screenshot">
+            <p class="screenshot-caption">▲ 管理メニュー</p>
+            
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <strong>「商品マスタ編集」をタップ</strong>
+                    マスタ編集画面が開きます
+                </div>
+            </div>
+            
+            <img src="images/05_master_editor.png" alt="マスタ編集画面" class="screenshot">
+            <p class="screenshot-caption">▲ マスタ編集画面</p>
+            
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <strong>商品を追加・編集・削除</strong>
+                    必要な操作を行います
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                    <strong>「ブラウザに保存」をタップ</strong>
+                    変更が保存されます
+                </div>
+            </div>
+            
+            <div class="warning">
+                <strong>⚠️ 注意</strong><br>
+                ブラウザのキャッシュをクリアすると、保存したマスタが消えます。「エクスポート」でバックアップを取っておきましょう。
+            </div>
+        </section>
+        
+        <!-- 6. QRコードの発行 -->
+        <section class="section" id="qr">
+            <h2>6. QRコードの発行</h2>
+            <p>新しい箱用のQRコードを発行できます。</p>
+            
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <strong>管理メニュー → 「QRコード発行」</strong>
+                    発行画面が開きます
+                </div>
+            </div>
+            
+            <img src="images/06_qr_generator.png" alt="QR発行画面" class="screenshot">
+            <p class="screenshot-caption">▲ QRコード発行画面</p>
+            
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <strong>商品・年度・枚数を設定</strong>
+                    必要な情報を入力します
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <strong>「QRコードを生成」をタップ</strong>
+                    プレビューが表示されます
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                    <strong>「印刷」をタップ</strong>
+                    ラベルシートに印刷します
+                </div>
+            </div>
+            
+            <div class="tip">
+                <strong>💡 対応ラベルシート</strong><br>
+                エーワン 72212（86.4mm × 42.3mm、12面）に対応しています。
+            </div>
+        </section>
+        
+        <!-- 7. よくある質問 -->
+        <section class="section" id="faq">
+            <h2>7. よくある質問</h2>
+            
+            <h3>Q. カメラが起動しません</h3>
+            <p>A. 設定アプリ → Safari → カメラ で「許可」を選択してください。</p>
+            
+            <h3>Q. 同じQRを2回読んでしまいました</h3>
+            <p>A. 大丈夫です。重複検知機能により、数量は1回分しかカウントされません。</p>
+            
+            <h3>Q. マスタを他のスマホと共有したい</h3>
+            <p>A. マスタ編集画面の「エクスポート」でJSONファイルを保存し、他のスマホで「インポート」してください。</p>
+            
+            <h3>Q. 読み取り中に間違えて戻ってしまいました</h3>
+            <p>A. 残念ながら、読み取りデータは失われます。最初からやり直してください。</p>
+        </section>
+    </div>
+    
+    <footer>
+        お守り在庫管理アプリ マニュアル
+    </footer>
+</body>
+</html>

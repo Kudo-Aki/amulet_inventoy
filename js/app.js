@@ -208,7 +208,7 @@ function confirmScanRegister() {
 }
 
 // ========================================
-// メール送信ダイアログの作成
+// CSV出力・共有ダイアログの作成
 // ========================================
 
 function createEmailDialog() {
@@ -218,25 +218,25 @@ function createEmailDialog() {
     dialog.innerHTML = `
         <div class="dialog" style="max-width: 400px;">
             <div class="dialog-header" style="background: #8B0000; color: white; padding: 16px; text-align: center;">
-                <span style="font-size: 1.5rem;">📧</span>
-                <div style="font-size: 1.1rem; font-weight: bold; margin-top: 4px;">CSV出力</div>
+                <span style="font-size: 1.5rem;">📤</span>
+                <div style="font-size: 1.1rem; font-weight: bold; margin-top: 4px;">CSV出力・共有</div>
             </div>
             <div class="dialog-body" style="padding: 20px;">
-                <div style="margin-bottom: 20px;">
-                    <button id="btn-download-csv" class="btn btn-primary" style="width: 100%; padding: 14px; font-size: 1rem; margin-bottom: 12px;">
+                <div style="margin-bottom: 16px;">
+                    <button id="btn-download-csv" class="btn btn-primary" style="width: 100%; padding: 14px; font-size: 1rem;">
                         📥 ダウンロード
                     </button>
-                    <p style="font-size: 0.85rem; color: #666; text-align: center;">CSVファイルを端末にダウンロードします</p>
+                    <p style="font-size: 0.85rem; color: #666; text-align: center; margin-top: 8px;">CSVファイルを端末に保存します</p>
                 </div>
-                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                <div>
-                    <label style="font-weight: bold; display: block; margin-bottom: 8px;">📧 メールで送信</label>
-                    <input type="email" id="email-address" placeholder="example@email.com" 
-                           style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 12px;">
-                    <button id="btn-send-email" class="btn btn-secondary" style="width: 100%; padding: 14px; font-size: 1rem;">
-                        ✉️ メールで送信
+                <hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;">
+                <div id="share-section">
+                    <button id="btn-share-csv" class="btn btn-secondary" style="width: 100%; padding: 14px; font-size: 1rem; background: #4CAF50; color: white; border: none;">
+                        📤 共有する（LINE・メール・AirDropなど）
                     </button>
-                    <p style="font-size: 0.85rem; color: #666; text-align: center; margin-top: 8px;">メールアプリが開きます</p>
+                    <p style="font-size: 0.85rem; color: #666; text-align: center; margin-top: 8px;">CSVファイルと集計結果を共有できます</p>
+                </div>
+                <div id="share-not-supported" style="display: none; text-align: center; color: #999; padding: 12px;">
+                    <p style="font-size: 0.85rem;">※ このブラウザでは共有機能を利用できません</p>
                 </div>
             </div>
             <div class="dialog-footer" style="padding: 16px; border-top: 1px solid #eee;">
@@ -251,10 +251,16 @@ function createEmailDialog() {
         exportCsvDownload();
         document.getElementById('email-dialog').classList.add('hidden');
     });
-    document.getElementById('btn-send-email').addEventListener('click', sendCsvByEmail);
+    document.getElementById('btn-share-csv').addEventListener('click', shareCsvFile);
     document.getElementById('btn-close-email-dialog').addEventListener('click', () => {
         document.getElementById('email-dialog').classList.add('hidden');
     });
+    
+    // Web Share API対応チェック
+    if (!navigator.share || !navigator.canShare) {
+        document.getElementById('share-section').style.display = 'none';
+        document.getElementById('share-not-supported').style.display = 'block';
+    }
 }
 
 function showExportOptions() {
@@ -648,48 +654,63 @@ function exportCsvDownload() {
     showSuccessToast('CSVをダウンロードしました');
 }
 
-function sendCsvByEmail() {
-    const emailAddress = document.getElementById('email-address').value.trim();
-    
-    if (!emailAddress) {
-        alert('メールアドレスを入力してください');
-        return;
-    }
-    
-    // メールアドレスの簡易バリデーション
-    if (!emailAddress.includes('@')) {
-        alert('正しいメールアドレスを入力してください');
-        return;
-    }
-    
+async function shareCsvFile() {
     const summary = calculateSummary();
     const modeText = session.mode === 'delivery' ? '納品' : '棚卸';
     const dateStr = formatDateTime(session.startTime);
+    const filename = generateCsvFilename();
     
-    // メール本文を作成
-    const subject = encodeURIComponent(`【お守り在庫管理】${modeText}結果 ${dateStr}`);
+    // CSVファイルを作成
+    const csvContent = generateCsvContent();
+    const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+    const csvFile = new File([csvBlob], filename, { type: 'text/csv' });
     
-    let body = `お守り在庫管理 ${modeText}結果\n`;
-    body += `日時: ${dateStr}\n\n`;
-    body += `【集計結果】\n`;
-    body += `総箱数: ${summary.totalBoxes}箱\n`;
-    body += `総数量: ${summary.totalQuantity}個\n\n`;
-    body += `【商品別内訳】\n`;
+    // 共有テキストを作成
+    let shareText = `お守り在庫管理 ${modeText}結果\n`;
+    shareText += `日時: ${dateStr}\n\n`;
+    shareText += `【集計結果】\n`;
+    shareText += `総箱数: ${summary.totalBoxes}箱\n`;
+    shareText += `総数量: ${summary.totalQuantity}個\n\n`;
+    shareText += `【商品別内訳】\n`;
     
     summary.products.forEach(product => {
-        body += `${product.name}: ${product.boxes}箱 × ${product.unitQuantity}個 = ${product.totalQuantity}個\n`;
+        shareText += `${product.name}: ${product.boxes}箱 × ${product.unitQuantity}個 = ${product.totalQuantity}個\n`;
     });
     
-    body += `\n---\n`;
-    body += `※ CSVファイルが必要な場合は、アプリから直接ダウンロードしてください。\n`;
-    
-    const encodedBody = encodeURIComponent(body);
-    
-    // メールアプリを開く
-    window.location.href = `mailto:${emailAddress}?subject=${subject}&body=${encodedBody}`;
-    
-    document.getElementById('email-dialog').classList.add('hidden');
-    showSuccessToast('メールアプリを開きました');
+    // Web Share APIで共有
+    try {
+        const shareData = {
+            title: `お守り在庫管理 ${modeText}結果`,
+            text: shareText,
+            files: [csvFile]
+        };
+        
+        // ファイル共有がサポートされているか確認
+        if (navigator.canShare && navigator.canShare(shareData)) {
+            await navigator.share(shareData);
+            document.getElementById('email-dialog').classList.add('hidden');
+            showSuccessToast('共有しました');
+        } else {
+            // ファイル共有がサポートされていない場合はテキストのみ共有
+            const textOnlyData = {
+                title: `お守り在庫管理 ${modeText}結果`,
+                text: shareText
+            };
+            await navigator.share(textOnlyData);
+            document.getElementById('email-dialog').classList.add('hidden');
+            showSuccessToast('共有しました（テキストのみ）');
+            // CSVもダウンロード
+            exportCsvDownload();
+        }
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            // ユーザーがキャンセルした場合
+            console.log('共有がキャンセルされました');
+        } else {
+            console.error('共有エラー:', err);
+            alert('共有に失敗しました。ダウンロードをお試しください。');
+        }
+    }
 }
 
 // 従来のexportCsv関数（互換性のため残す）
