@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QRコード発行</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -148,51 +148,40 @@
             background: #4CAF50;
             color: white;
         }
+        .btn-success:hover {
+            background: #388E3C;
+        }
         #qr-preview {
             display: none;
-            margin-top: 20px;
         }
         
         /* プレビューエリア（画面表示用） */
         .preview-container {
-            background: #f0f0f0;
+            background: #e0e0e0;
             padding: 20px;
             border-radius: 8px;
             overflow-x: auto;
             margin-top: 16px;
         }
         
-        /* ===== エーワン72212 仕様 =====
-         * A4サイズ: 210mm x 297mm
-         * ラベルサイズ: 86.4mm x 42.3mm
-         * 面付: 12面（2列 x 6段）
-         * 上余白: 8.8mm
-         * 左余白: 18.6mm
-         * 下余白: 8.8mm (297 - 8.8 - 42.3*6 = 34.4mm → 実際は8.8mm程度)
-         * 右余白: 18.6mm
-         * ============================= */
-        
-        .print-sheet {
+        .preview-sheet {
             width: 210mm;
-            height: 297mm;
+            min-height: 297mm;
             margin: 0 auto 20px auto;
             background: white;
             position: relative;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            padding: 8.8mm 18.6mm;
         }
         
-        .qr-grid {
-            position: absolute;
-            top: 8.8mm;
-            left: 18.6mm;
+        .preview-grid {
             display: grid;
             grid-template-columns: repeat(2, 86.4mm);
             grid-template-rows: repeat(6, 42.3mm);
             gap: 0;
         }
         
-        .qr-cell {
+        .preview-cell {
             width: 86.4mm;
             height: 42.3mm;
             display: flex;
@@ -200,54 +189,52 @@
             align-items: center;
             justify-content: flex-start;
             padding: 2mm;
-            border: 0.5px dashed #ccc;
+            border: 1px dashed #ccc;
             overflow: hidden;
             box-sizing: border-box;
         }
         
-        .qr-cell .qr-image {
+        .preview-cell .qr-image {
             flex-shrink: 0;
-            width: 36mm;
-            height: 36mm;
+            width: 38mm;
+            height: 38mm;
             display: flex;
             align-items: center;
             justify-content: center;
         }
         
-        .qr-cell .qr-image canvas {
-            width: 36mm !important;
-            height: 36mm !important;
-            max-width: 36mm;
-            max-height: 36mm;
+        .preview-cell .qr-image canvas {
+            width: 38mm !important;
+            height: 38mm !important;
         }
         
-        .qr-cell .qr-info {
+        .preview-cell .qr-info {
             flex: 1;
             display: flex;
             flex-direction: column;
             justify-content: center;
-            padding-left: 3mm;
+            padding-left: 2mm;
             overflow: hidden;
         }
         
-        .qr-cell .product-name {
-            font-size: 15pt;
+        .preview-cell .product-name {
+            font-size: 14pt;
             font-weight: bold;
             color: #8B0000;
-            margin-bottom: 1.5mm;
+            margin-bottom: 1mm;
             line-height: 1.2;
         }
         
-        .qr-cell .qr-code-text {
-            font-size: 10pt;
+        .preview-cell .qr-code-text {
+            font-size: 9pt;
             font-family: 'Courier New', monospace;
             color: #333;
-            margin-bottom: 1.5mm;
+            margin-bottom: 1mm;
             font-weight: bold;
         }
         
-        .qr-cell .box-info {
-            font-size: 11pt;
+        .preview-cell .box-info {
+            font-size: 10pt;
             color: #333;
             font-weight: 600;
         }
@@ -289,102 +276,14 @@
         .history-table th {
             background: #f9f9f9;
         }
-        
-        /* ===== 印刷時のスタイル ===== */
-        @media print {
-            @page {
-                size: A4 portrait;
-                margin: 0;
-            }
-            
-            html, body {
-                width: 210mm;
-                height: 297mm;
-                margin: 0 !important;
-                padding: 0 !important;
-                background: white !important;
-            }
-            
-            /* 印刷しない要素を非表示 */
-            .header,
-            .container > .section:not(#qr-preview),
-            .back-link,
-            #qr-preview > h2,
-            #qr-preview > .success-box,
-            #qr-preview > .info-box,
-            #qr-preview > .btn,
-            .no-print {
-                display: none !important;
-            }
-            
-            .container {
-                max-width: none;
-                padding: 0;
-                margin: 0;
-            }
-            
-            #qr-preview {
-                padding: 0;
-                margin: 0;
-                box-shadow: none;
-                background: none;
-            }
-            
-            .preview-container {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 210mm;
-                padding: 0 !important;
-                margin: 0 !important;
-                background: white !important;
-            }
-            
-            .print-sheet {
-                width: 210mm;
-                height: 297mm;
-                margin: 0 !important;
-                padding: 0 !important;
-                box-shadow: none !important;
-                page-break-after: always;
-                page-break-inside: avoid;
-                overflow: hidden;
-            }
-            
-            .print-sheet:last-child {
-                page-break-after: avoid;
-            }
-            
-            .qr-grid {
-                position: absolute;
-                top: 8.8mm;
-                left: 18.6mm;
-            }
-            
-            .qr-cell {
-                border: none !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-            }
-            
-            .qr-cell .product-name {
-                color: #8B0000 !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-            }
-            
-            .no-print {
-                display: none !important;
-            }
-        }
     </style>
 </head>
 <body>
-    <div class="header no-print">
+    <div class="header">
         <h1>🏷️ QRコード発行</h1>
     </div>
 
-    <div class="container no-print">
+    <div class="container">
         <div class="section">
             <h2>使用ラベルシート</h2>
             <div class="label-info">
@@ -442,15 +341,16 @@
             <div id="generation-info" class="success-box"></div>
             <div class="info-box">
                 <strong>💡 印刷のヒント:</strong><br>
+                ・「印刷用ページを開く」ボタンをクリックすると、印刷専用ページが開きます<br>
                 ・プリンター設定で「実際のサイズ」または「100%」を選択<br>
                 ・「ページに合わせる」はオフに<br>
                 ・余白は「なし」または「最小」に設定
             </div>
-            <button class="btn btn-success" onclick="window.print()">🖨️ 印刷</button>
+            <button class="btn btn-success" onclick="openPrintPage()">🖨️ 印刷用ページを開く</button>
             <button class="btn btn-secondary" onclick="saveHistory()">💾 履歴に保存</button>
             
-            <!-- プレビューエリア（セクション内に配置） -->
-            <div class="preview-container" id="print-area"></div>
+            <!-- プレビューエリア -->
+            <div class="preview-container" id="preview-area"></div>
         </div>
 
         <div class="section">
@@ -489,14 +389,8 @@
             'YAKUYOKE': { name: '厄除け守り', quantity: 50 }
         };
 
-        // シート設定
-        const SHEET_CONFIG = {
-            perSheet: 12,  // 1シートあたりの枚数
-            cols: 2,
-            rows: 6
-        };
-
         let master = {};
+        let generatedData = null; // 生成されたQRデータを保存
 
         // 初期化
         document.addEventListener('DOMContentLoaded', function() {
@@ -543,33 +437,44 @@
                 return;
             }
 
-            const printArea = document.getElementById('print-area');
-            printArea.innerHTML = '';
+            // データを保存
+            generatedData = {
+                productCode: productCode,
+                productName: master[productCode].name,
+                quantity: master[productCode].quantity,
+                year: year,
+                startNumber: startNumber,
+                count: count
+            };
+
+            const previewArea = document.getElementById('preview-area');
+            previewArea.innerHTML = '';
 
             // シートごとに分割
-            const totalSheets = Math.ceil(count / SHEET_CONFIG.perSheet);
+            const perSheet = 12;
+            const totalSheets = Math.ceil(count / perSheet);
             let qrIndex = 0;
 
             for (let sheetNum = 0; sheetNum < totalSheets; sheetNum++) {
                 const sheet = document.createElement('div');
-                sheet.className = 'print-sheet';
+                sheet.className = 'preview-sheet';
                 
                 const grid = document.createElement('div');
-                grid.className = 'qr-grid';
+                grid.className = 'preview-grid';
 
-                for (let i = 0; i < SHEET_CONFIG.perSheet && qrIndex < count; i++) {
+                for (let i = 0; i < perSheet && qrIndex < count; i++) {
                     const boxNumber = startNumber + qrIndex;
                     const qrData = `${productCode}-${year}-${String(boxNumber).padStart(4, '0')}`;
                     
                     const cell = document.createElement('div');
-                    cell.className = 'qr-cell';
+                    cell.className = 'preview-cell';
                     
                     // QRコード部分
                     const qrImage = document.createElement('div');
                     qrImage.className = 'qr-image';
                     const canvas = document.createElement('canvas');
                     await QRCode.toCanvas(canvas, qrData, {
-                        width: 180,
+                        width: 200,
                         margin: 1,
                         errorCorrectionLevel: 'M'
                     });
@@ -592,7 +497,7 @@
                 }
 
                 sheet.appendChild(grid);
-                printArea.appendChild(sheet);
+                previewArea.appendChild(sheet);
             }
 
             // プレビュー表示
@@ -609,19 +514,265 @@
             document.getElementById('qr-preview').scrollIntoView({ behavior: 'smooth' });
         }
 
+        // 印刷用ページを開く
+        function openPrintPage() {
+            if (!generatedData) {
+                showToast('先にQRコードを生成してください', 'error');
+                return;
+            }
+
+            // 新しいウィンドウを開く
+            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            
+            // 印刷用HTMLを生成
+            const printHTML = generatePrintHTML();
+            
+            printWindow.document.write(printHTML);
+            printWindow.document.close();
+        }
+
+        // 印刷用HTMLを生成
+        function generatePrintHTML() {
+            const { productCode, productName, quantity, year, startNumber, count } = generatedData;
+            const perSheet = 12;
+            const totalSheets = Math.ceil(count / perSheet);
+
+            let sheetsHTML = '';
+            let qrIndex = 0;
+
+            for (let sheetNum = 0; sheetNum < totalSheets; sheetNum++) {
+                let cellsHTML = '';
+                
+                for (let i = 0; i < perSheet && qrIndex < count; i++) {
+                    const boxNumber = startNumber + qrIndex;
+                    const qrData = `${productCode}-${year}-${String(boxNumber).padStart(4, '0')}`;
+                    
+                    cellsHTML += `
+                        <div class="cell">
+                            <div class="qr-container" id="qr-${sheetNum}-${i}" data-qr="${qrData}"></div>
+                            <div class="info">
+                                <div class="product-name">${productName}</div>
+                                <div class="qr-text">${qrData}</div>
+                                <div class="box-info">入数: ${quantity}個/箱</div>
+                            </div>
+                        </div>
+                    `;
+                    qrIndex++;
+                }
+
+                // 残りの空セルを追加
+                const remaining = perSheet - (qrIndex - sheetNum * perSheet);
+                for (let i = 0; i < remaining && sheetNum === totalSheets - 1; i++) {
+                    cellsHTML += '<div class="cell empty"></div>';
+                }
+
+                sheetsHTML += `
+                    <div class="sheet">
+                        <div class="grid">
+                            ${cellsHTML}
+                        </div>
+                    </div>
+                `;
+            }
+
+            return `
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>QRコード印刷 - ${productName}</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"><\/script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        @page {
+            size: A4 portrait;
+            margin: 0;
+        }
+        
+        body {
+            font-family: 'Hiragino Sans', 'Meiryo', sans-serif;
+            background: #888;
+        }
+        
+        .sheet {
+            width: 210mm;
+            height: 297mm;
+            background: white;
+            margin: 10px auto;
+            padding: 8.8mm 18.6mm;
+            page-break-after: always;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        }
+        
+        .sheet:last-child {
+            page-break-after: avoid;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, 86.4mm);
+            grid-template-rows: repeat(6, 42.3mm);
+            gap: 0;
+        }
+        
+        .cell {
+            width: 86.4mm;
+            height: 42.3mm;
+            display: flex;
+            align-items: center;
+            padding: 2mm;
+            border: 0.5px dashed #ddd;
+        }
+        
+        .cell.empty {
+            border: 0.5px dashed #eee;
+        }
+        
+        .qr-container {
+            width: 38mm;
+            height: 38mm;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .qr-container canvas {
+            width: 38mm !important;
+            height: 38mm !important;
+        }
+        
+        .info {
+            flex: 1;
+            padding-left: 2mm;
+        }
+        
+        .product-name {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #8B0000;
+            margin-bottom: 1mm;
+        }
+        
+        .qr-text {
+            font-size: 9pt;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            margin-bottom: 1mm;
+        }
+        
+        .box-info {
+            font-size: 10pt;
+            font-weight: 600;
+        }
+        
+        .controls {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        
+        .controls button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        
+        .controls button:hover {
+            background: #388E3C;
+        }
+        
+        .controls button.close-btn {
+            background: #666;
+        }
+        
+        @media print {
+            body {
+                background: white;
+            }
+            
+            .controls {
+                display: none !important;
+            }
+            
+            .sheet {
+                margin: 0;
+                box-shadow: none;
+                page-break-after: always;
+            }
+            
+            .sheet:last-child {
+                page-break-after: avoid;
+            }
+            
+            .cell {
+                border: none !important;
+            }
+            
+            .product-name {
+                color: #8B0000 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button onclick="window.print()">🖨️ 印刷する</button>
+        <button class="close-btn" onclick="window.close()">✕ 閉じる</button>
+    </div>
+    
+    ${sheetsHTML}
+    
+    <script>
+        // QRコードを生成
+        document.querySelectorAll('.qr-container').forEach(async function(container) {
+            const qrData = container.getAttribute('data-qr');
+            if (qrData) {
+                const canvas = document.createElement('canvas');
+                await QRCode.toCanvas(canvas, qrData, {
+                    width: 200,
+                    margin: 1,
+                    errorCorrectionLevel: 'M'
+                });
+                container.appendChild(canvas);
+            }
+        });
+    <\/script>
+</body>
+</html>
+            `;
+        }
+
         // 発行履歴を保存
         function saveHistory() {
-            const productCode = document.getElementById('product-select').value;
-            const year = document.getElementById('year').value.padStart(2, '0');
-            const startNumber = parseInt(document.getElementById('start-number').value);
-            const count = parseInt(document.getElementById('count').value);
+            if (!generatedData) {
+                showToast('先にQRコードを生成してください', 'error');
+                return;
+            }
 
-            if (!productCode) return;
+            const { productCode, productName, year, startNumber, count } = generatedData;
 
             const history = JSON.parse(localStorage.getItem('qr_history') || '[]');
             history.unshift({
                 date: new Date().toLocaleString('ja-JP'),
-                product: master[productCode].name,
+                product: productName,
                 productCode: productCode,
                 year: year,
                 startNumber: startNumber,
