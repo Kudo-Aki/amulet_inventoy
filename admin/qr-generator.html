@@ -159,10 +159,19 @@
             border-radius: 4px;
         }
         
-        /* ===== 印刷用スタイル（画面表示用） ===== */
+        /* ===== エーワン72212 仕様 =====
+         * A4サイズ: 210mm x 297mm
+         * ラベルサイズ: 86.4mm x 42.3mm
+         * 面付: 12面（2列 x 6段）
+         * 上余白: 8.8mm
+         * 左余白: 18.6mm
+         * 列間隔: 0mm
+         * 行間隔: 0mm
+         * ============================= */
+        
         .print-sheet {
             width: 210mm;
-            height: 296mm;
+            height: 297mm;
             margin: 0 auto 20px auto;
             background: white;
             position: relative;
@@ -170,13 +179,14 @@
             overflow: hidden;
         }
         
-        /* エーワン 72212: 86.4mm x 42.3mm, 12面 (2列 x 6段) */
         .qr-grid {
+            position: absolute;
+            top: 8.8mm;
+            left: 18.6mm;
             display: grid;
             grid-template-columns: repeat(2, 86.4mm);
             grid-template-rows: repeat(6, 42.3mm);
-            padding-top: 8.8mm;
-            padding-left: 18.6mm;
+            gap: 0;
         }
         
         .qr-cell {
@@ -186,7 +196,7 @@
             flex-direction: row;
             align-items: center;
             justify-content: flex-start;
-            padding: 1mm;
+            padding: 2mm;
             border: 0.5px dashed #ccc;
             overflow: hidden;
             box-sizing: border-box;
@@ -194,18 +204,18 @@
         
         .qr-cell .qr-image {
             flex-shrink: 0;
-            width: 40mm;
-            height: 40mm;
+            width: 38mm;
+            height: 38mm;
             display: flex;
             align-items: center;
             justify-content: center;
         }
         
         .qr-cell .qr-image canvas {
-            width: 40mm !important;
-            height: 40mm !important;
-            max-width: 40mm;
-            max-height: 40mm;
+            width: 38mm !important;
+            height: 38mm !important;
+            max-width: 38mm;
+            max-height: 38mm;
         }
         
         .qr-cell .qr-info {
@@ -213,7 +223,7 @@
             display: flex;
             flex-direction: column;
             justify-content: center;
-            padding-left: 2mm;
+            padding-left: 3mm;
             overflow: hidden;
         }
         
@@ -221,22 +231,22 @@
             font-size: 16pt;
             font-weight: bold;
             color: #8B0000;
-            margin-bottom: 2mm;
+            margin-bottom: 1.5mm;
             line-height: 1.2;
         }
         
         .qr-cell .qr-code-text {
-            font-size: 12pt;
+            font-size: 11pt;
             font-family: 'Courier New', monospace;
             color: #333;
-            margin-bottom: 1mm;
+            margin-bottom: 1.5mm;
             font-weight: bold;
         }
         
         .qr-cell .box-info {
-            font-size: 10pt;
-            color: #555;
-            font-weight: 500;
+            font-size: 12pt;
+            color: #333;
+            font-weight: 600;
         }
         
         .toast {
@@ -314,7 +324,7 @@
             
             .print-sheet {
                 width: 210mm;
-                height: 296mm;
+                height: 297mm;
                 margin: 0 !important;
                 padding: 0 !important;
                 box-shadow: none !important;
@@ -328,8 +338,9 @@
             }
             
             .qr-grid {
-                padding-top: 8.8mm;
-                padding-left: 18.6mm;
+                position: absolute;
+                top: 8.8mm;
+                left: 18.6mm;
             }
             
             .qr-cell {
