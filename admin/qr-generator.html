@@ -158,78 +158,87 @@
             border: 1px solid #ddd;
             border-radius: 4px;
         }
-        /* A4用紙サイズ（210mm x 297mm）*/
+        
+        /* ===== 印刷用スタイル（画面表示用） ===== */
         .print-sheet {
             width: 210mm;
-            height: 297mm; /* min-heightからheightに変更して白紙ページを防止 */
-            max-height: 297mm;
-            margin: 0 auto;
+            height: 296mm;
+            margin: 0 auto 20px auto;
             background: white;
             position: relative;
-            page-break-after: always;
-            page-break-inside: avoid;
-            overflow: hidden; /* はみ出し防止 */
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            overflow: hidden;
         }
-        /* 最後のシートはpage-break-afterを無効化 */
-        .print-sheet:last-child {
-            page-break-after: auto;
-        }
+        
         /* エーワン 72212: 86.4mm x 42.3mm, 12面 (2列 x 6段) */
-        .sheet-72212 {
+        .qr-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 86.4mm);
+            grid-template-rows: repeat(6, 42.3mm);
             padding-top: 8.8mm;
             padding-left: 18.6mm;
         }
-        .sheet-72212 .qr-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 86.4mm);
-            grid-template-rows: repeat(6, 42.3mm); /* 46.6mmから42.3mmに修正（実際のラベル高さ） */
-        }
-        .sheet-72212 .qr-cell {
+        
+        .qr-cell {
             width: 86.4mm;
-            height: 42.3mm; /* ラベル高さいっぱい */
+            height: 42.3mm;
             display: flex;
             flex-direction: row;
             align-items: center;
             justify-content: flex-start;
-            padding: 1mm; /* パディングを最小化 */
-            border: 0.5px dashed #eee;
+            padding: 1mm;
+            border: 0.5px dashed #ccc;
             overflow: hidden;
+            box-sizing: border-box;
         }
-        .sheet-72212 .qr-cell .qr-image {
+        
+        .qr-cell .qr-image {
             flex-shrink: 0;
-            margin-right: 2mm; /* マージンを縮小 */
+            width: 40mm;
+            height: 40mm;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .sheet-72212 .qr-cell canvas {
-            width: 40mm !important; /* QRを大きく（35mm→40mm） */
+        
+        .qr-cell .qr-image canvas {
+            width: 40mm !important;
             height: 40mm !important;
+            max-width: 40mm;
+            max-height: 40mm;
         }
-        .sheet-72212 .qr-cell .qr-info {
+        
+        .qr-cell .qr-info {
             flex: 1;
             display: flex;
             flex-direction: column;
             justify-content: center;
+            padding-left: 2mm;
             overflow: hidden;
         }
-        .sheet-72212 .qr-cell .product-name {
-            font-size: 18pt; /* 文字を大きく（14pt→18pt） */
+        
+        .qr-cell .product-name {
+            font-size: 16pt;
             font-weight: bold;
             color: #8B0000;
-            margin-bottom: 1mm;
-            line-height: 1.1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            margin-bottom: 2mm;
+            line-height: 1.2;
         }
-        .sheet-72212 .qr-cell .qr-code-text {
-            font-size: 13pt; /* 文字を大きく（11pt→13pt） */
-            font-family: monospace;
+        
+        .qr-cell .qr-code-text {
+            font-size: 12pt;
+            font-family: 'Courier New', monospace;
             color: #333;
-            margin-bottom: 0.5mm;
+            margin-bottom: 1mm;
+            font-weight: bold;
         }
-        .sheet-72212 .qr-cell .box-info {
-            font-size: 11pt; /* 文字を大きく（9pt→11pt） */
-            color: #666;
+        
+        .qr-cell .box-info {
+            font-size: 10pt;
+            color: #555;
+            font-weight: 500;
         }
+        
         .toast {
             position: fixed;
             bottom: 20px;
@@ -267,55 +276,74 @@
         .history-table th {
             background: #f9f9f9;
         }
+        
+        /* ===== 印刷時のスタイル ===== */
         @media print {
             @page {
-                size: A4;
+                size: A4 portrait;
                 margin: 0;
             }
+            
             html, body {
                 width: 210mm;
                 height: 297mm;
-                margin: 0;
-                padding: 0;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
             }
+            
             body * {
                 visibility: hidden;
             }
-            .print-area, .print-area * {
+            
+            .print-area,
+            .print-area * {
                 visibility: visible;
             }
+            
             .print-area {
                 position: absolute;
                 left: 0;
                 top: 0;
                 width: 210mm;
-                padding: 0;
-                border: none;
-                margin: 0;
+                padding: 0 !important;
+                margin: 0 !important;
+                border: none !important;
+                background: white !important;
             }
+            
             .print-sheet {
                 width: 210mm;
-                height: 297mm;
-                max-height: 297mm;
-                margin: 0;
-                padding-top: 8.8mm;
-                padding-left: 18.6mm;
+                height: 296mm;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-shadow: none !important;
                 page-break-after: always;
                 page-break-inside: avoid;
                 overflow: hidden;
-                box-sizing: border-box;
             }
+            
             .print-sheet:last-child {
-                page-break-after: auto;
+                page-break-after: avoid;
             }
-            .sheet-72212 .qr-grid {
-                grid-template-rows: repeat(6, 42.3mm);
+            
+            .qr-grid {
+                padding-top: 8.8mm;
+                padding-left: 18.6mm;
             }
-            .sheet-72212 .qr-cell {
-                border: none;
-                height: 42.3mm;
-                overflow: hidden;
+            
+            .qr-cell {
+                border: none !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
+            
+            .qr-cell .product-name {
+                color: #8B0000 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            
             .no-print {
                 display: none !important;
             }
@@ -323,11 +351,11 @@
     </style>
 </head>
 <body>
-    <div class="header">
+    <div class="header no-print">
         <h1>🏷️ QRコード発行</h1>
     </div>
 
-    <div class="container">
+    <div class="container no-print">
         <div class="section">
             <h2>使用ラベルシート</h2>
             <div class="label-info">
@@ -374,33 +402,31 @@
                 <div class="form-group">
                     <label>枚数</label>
                     <small>生成するQRの数（12の倍数推奨）</small>
-                    <input type="number" id="count" value="12" min="1" max="264">
+                    <input type="number" id="count" value="12" min="1" max="120">
                 </div>
             </div>
-            <button class="btn btn-primary" onclick="generateQRCodes()">QRコードを生成</button>
+            <button class="btn btn-primary" onclick="generateQRCodes()">🔲 QRコードを生成</button>
         </div>
 
         <div id="qr-preview" class="section">
             <h2>プレビュー</h2>
             <div id="generation-info" class="success-box"></div>
-            <div class="no-print" style="margin-bottom: 16px;">
-                <button class="btn btn-success" onclick="window.print()">🖨️ 印刷</button>
-                <button class="btn btn-secondary" onclick="saveHistory()">💾 発行履歴を保存</button>
+            <div class="info-box">
+                <strong>💡 印刷のヒント:</strong><br>
+                ・プリンター設定で「実際のサイズ」または「100%」を選択<br>
+                ・「ページに合わせる」はオフに<br>
+                ・余白は「なし」または「最小」に設定
             </div>
-            <div class="print-area" id="print-area">
-                <!-- QRコードがここに生成される -->
-            </div>
+            <button class="btn btn-success" onclick="window.print()">🖨️ 印刷</button>
+            <button class="btn btn-secondary" onclick="saveHistory()">💾 履歴に保存</button>
         </div>
 
         <div class="section">
             <h2>発行履歴</h2>
-            <div class="info-box">
-                過去に発行したQRコードの履歴です。次回の開始番号の参考にしてください。
-            </div>
             <table class="history-table">
                 <thead>
                     <tr>
-                        <th>日時</th>
+                        <th>発行日時</th>
                         <th>商品</th>
                         <th>年度</th>
                         <th>番号範囲</th>
@@ -410,11 +436,14 @@
                 <tbody id="history-tbody">
                 </tbody>
             </table>
-            <button class="btn btn-secondary" onclick="clearHistory()" style="margin-top: 12px;">履歴をクリア</button>
+            <button class="btn btn-secondary" onclick="clearHistory()" style="margin-top:12px;">🗑️ 履歴をクリア</button>
         </div>
 
         <a href="index.html" class="back-link">← 管理メニューに戻る</a>
     </div>
+
+    <!-- 印刷エリア -->
+    <div id="print-area" class="print-area"></div>
 
     <div id="toast" class="toast"></div>
 
@@ -422,28 +451,26 @@
         // デフォルトマスタ
         const DEFAULT_MASTER = {
             'HEALTH': { name: '健康守り', quantity: 50 },
-            'MONEY': { name: '金運守り', quantity: 100 },
-            'LOVE': { name: '縁結び守り', quantity: 80 },
-            'TRAFFIC': { name: '交通安全守り', quantity: 60 },
-            'STUDY': { name: '学業成就守り', quantity: 70 },
-            'FAMILY': { name: '家内安全守り', quantity: 50 },
-            'BUSINESS': { name: '商売繁盛守り', quantity: 60 },
+            'TRAFFIC': { name: '交通安全守り', quantity: 50 },
+            'STUDY': { name: '学業成就守り', quantity: 40 },
+            'LOVE': { name: '縁結び守り', quantity: 30 },
+            'MONEY': { name: '金運守り', quantity: 40 },
             'CHILD': { name: '子授け守り', quantity: 40 },
-            'RECOVERY': { name: '病気平癒守り', quantity: 50 },
-            'LUCK': { name: '開運守り', quantity: 80 }
+            'SAFE': { name: '安産守り', quantity: 40 },
+            'YAKUYOKE': { name: '厄除け守り', quantity: 50 }
         };
 
-        // ラベルシート設定（72212専用）
+        // シート設定
         const SHEET_CONFIG = {
+            perSheet: 12,  // 1シートあたりの枚数
             cols: 2,
-            rows: 6,
-            perSheet: 12
+            rows: 6
         };
 
         let master = {};
 
         // 初期化
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', function() {
             loadMaster();
             populateProductSelect();
             loadHistory();
@@ -496,7 +523,7 @@
 
             for (let sheetNum = 0; sheetNum < totalSheets; sheetNum++) {
                 const sheet = document.createElement('div');
-                sheet.className = 'print-sheet sheet-72212';
+                sheet.className = 'print-sheet';
                 
                 const grid = document.createElement('div');
                 grid.className = 'qr-grid';
