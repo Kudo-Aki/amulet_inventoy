@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QRコード発行</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <!-- qrcode.js ライブラリ（CDN） -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -203,6 +204,7 @@
             justify-content: center;
         }
         
+        .preview-cell .qr-image img,
         .preview-cell .qr-image canvas {
             width: 38mm !important;
             height: 38mm !important;
@@ -390,7 +392,7 @@
         };
 
         let master = {};
-        let generatedData = null; // 生成されたQRデータを保存
+        let generatedData = null;
 
         // 初期化
         document.addEventListener('DOMContentLoaded', function() {
@@ -426,9 +428,9 @@
         }
 
         // QRコード生成
-        async function generateQRCodes() {
+        function generateQRCodes() {
             const productCode = document.getElementById('product-select').value;
-            const year = document.getElementById('year').value.padStart(2, '0');
+            const year = String(document.getElementById('year').value).padStart(2, '0');
             const startNumber = parseInt(document.getElementById('start-number').value);
             const count = parseInt(document.getElementById('count').value);
 
@@ -472,13 +474,19 @@
                     // QRコード部分
                     const qrImage = document.createElement('div');
                     qrImage.className = 'qr-image';
-                    const canvas = document.createElement('canvas');
-                    await QRCode.toCanvas(canvas, qrData, {
-                        width: 200,
-                        margin: 1,
-                        errorCorrectionLevel: 'M'
+                    const qrContainer = document.createElement('div');
+                    qrContainer.id = `qr-preview-${sheetNum}-${i}`;
+                    qrImage.appendChild(qrContainer);
+                    
+                    // QRコード生成（qrcode.js使用）
+                    new QRCode(qrContainer, {
+                        text: qrData,
+                        width: 150,
+                        height: 150,
+                        colorDark: '#000000',
+                        colorLight: '#ffffff',
+                        correctLevel: QRCode.CorrectLevel.M
                     });
-                    qrImage.appendChild(canvas);
                     
                     // 情報部分
                     const qrInfo = document.createElement('div');
@@ -522,7 +530,12 @@
             }
 
             // 新しいウィンドウを開く
-            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            const printWindow = window.open('', '_blank', 'width=900,height=700');
+            
+            if (!printWindow) {
+                showToast('ポップアップがブロックされました。許可してください。', 'error');
+                return;
+            }
             
             // 印刷用HTMLを生成
             const printHTML = generatePrintHTML();
@@ -560,12 +573,6 @@
                     qrIndex++;
                 }
 
-                // 残りの空セルを追加
-                const remaining = perSheet - (qrIndex - sheetNum * perSheet);
-                for (let i = 0; i < remaining && sheetNum === totalSheets - 1; i++) {
-                    cellsHTML += '<div class="cell empty"></div>';
-                }
-
                 sheetsHTML += `
                     <div class="sheet">
                         <div class="grid">
@@ -575,13 +582,12 @@
                 `;
             }
 
-            return `
-<!DOCTYPE html>
+            return `<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <title>QRコード印刷 - ${productName}</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"><\/script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"><\/script>
     <style>
         * {
             margin: 0;
@@ -629,10 +635,6 @@
             border: 0.5px dashed #ddd;
         }
         
-        .cell.empty {
-            border: 0.5px dashed #eee;
-        }
-        
         .qr-container {
             width: 38mm;
             height: 38mm;
@@ -642,6 +644,7 @@
             justify-content: center;
         }
         
+        .qr-container img,
         .qr-container canvas {
             width: 38mm !important;
             height: 38mm !important;
@@ -741,23 +744,25 @@
     ${sheetsHTML}
     
     <script>
-        // QRコードを生成
-        document.querySelectorAll('.qr-container').forEach(async function(container) {
-            const qrData = container.getAttribute('data-qr');
-            if (qrData) {
-                const canvas = document.createElement('canvas');
-                await QRCode.toCanvas(canvas, qrData, {
-                    width: 200,
-                    margin: 1,
-                    errorCorrectionLevel: 'M'
-                });
-                container.appendChild(canvas);
-            }
-        });
+        // ページ読み込み後にQRコードを生成
+        window.onload = function() {
+            document.querySelectorAll('.qr-container').forEach(function(container) {
+                const qrData = container.getAttribute('data-qr');
+                if (qrData) {
+                    new QRCode(container, {
+                        text: qrData,
+                        width: 150,
+                        height: 150,
+                        colorDark: '#000000',
+                        colorLight: '#ffffff',
+                        correctLevel: QRCode.CorrectLevel.M
+                    });
+                }
+            });
+        };
     <\/script>
 </body>
-</html>
-            `;
+</html>`;
         }
 
         // 発行履歴を保存
