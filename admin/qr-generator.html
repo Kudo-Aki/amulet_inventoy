@@ -305,13 +305,29 @@
                 background: white !important;
             }
             
-            body * {
-                visibility: hidden;
+            /* 印刷しない要素を非表示 */
+            .header,
+            .container > .section:not(#qr-preview),
+            .back-link,
+            #qr-preview > h2,
+            #qr-preview > .success-box,
+            #qr-preview > .info-box,
+            #qr-preview > .btn,
+            .no-print {
+                display: none !important;
             }
             
-            .preview-container,
-            .preview-container * {
-                visibility: visible;
+            .container {
+                max-width: none;
+                padding: 0;
+                margin: 0;
+            }
+            
+            #qr-preview {
+                padding: 0;
+                margin: 0;
+                box-shadow: none;
+                background: none;
             }
             
             .preview-container {
