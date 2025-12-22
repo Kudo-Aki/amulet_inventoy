@@ -152,11 +152,14 @@
             display: none;
             margin-top: 20px;
         }
-        .print-area {
-            background: white;
+        
+        /* プレビューエリア（画面表示用） */
+        .preview-container {
+            background: #f0f0f0;
             padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin-top: 16px;
         }
         
         /* ===== エーワン72212 仕様 =====
@@ -165,8 +168,8 @@
          * 面付: 12面（2列 x 6段）
          * 上余白: 8.8mm
          * 左余白: 18.6mm
-         * 列間隔: 0mm
-         * 行間隔: 0mm
+         * 下余白: 8.8mm (297 - 8.8 - 42.3*6 = 34.4mm → 実際は8.8mm程度)
+         * 右余白: 18.6mm
          * ============================= */
         
         .print-sheet {
@@ -204,18 +207,18 @@
         
         .qr-cell .qr-image {
             flex-shrink: 0;
-            width: 38mm;
-            height: 38mm;
+            width: 36mm;
+            height: 36mm;
             display: flex;
             align-items: center;
             justify-content: center;
         }
         
         .qr-cell .qr-image canvas {
-            width: 38mm !important;
-            height: 38mm !important;
-            max-width: 38mm;
-            max-height: 38mm;
+            width: 36mm !important;
+            height: 36mm !important;
+            max-width: 36mm;
+            max-height: 36mm;
         }
         
         .qr-cell .qr-info {
@@ -228,7 +231,7 @@
         }
         
         .qr-cell .product-name {
-            font-size: 16pt;
+            font-size: 15pt;
             font-weight: bold;
             color: #8B0000;
             margin-bottom: 1.5mm;
@@ -236,7 +239,7 @@
         }
         
         .qr-cell .qr-code-text {
-            font-size: 11pt;
+            font-size: 10pt;
             font-family: 'Courier New', monospace;
             color: #333;
             margin-bottom: 1.5mm;
@@ -244,7 +247,7 @@
         }
         
         .qr-cell .box-info {
-            font-size: 12pt;
+            font-size: 11pt;
             color: #333;
             font-weight: 600;
         }
@@ -306,19 +309,18 @@
                 visibility: hidden;
             }
             
-            .print-area,
-            .print-area * {
+            .preview-container,
+            .preview-container * {
                 visibility: visible;
             }
             
-            .print-area {
+            .preview-container {
                 position: absolute;
                 left: 0;
                 top: 0;
                 width: 210mm;
                 padding: 0 !important;
                 margin: 0 !important;
-                border: none !important;
                 background: white !important;
             }
             
@@ -430,6 +432,9 @@
             </div>
             <button class="btn btn-success" onclick="window.print()">🖨️ 印刷</button>
             <button class="btn btn-secondary" onclick="saveHistory()">💾 履歴に保存</button>
+            
+            <!-- プレビューエリア（セクション内に配置） -->
+            <div class="preview-container" id="print-area"></div>
         </div>
 
         <div class="section">
@@ -452,9 +457,6 @@
 
         <a href="index.html" class="back-link">← 管理メニューに戻る</a>
     </div>
-
-    <!-- 印刷エリア -->
-    <div id="print-area" class="print-area"></div>
 
     <div id="toast" class="toast"></div>
 
@@ -551,7 +553,7 @@
                     qrImage.className = 'qr-image';
                     const canvas = document.createElement('canvas');
                     await QRCode.toCanvas(canvas, qrData, {
-                        width: 200,
+                        width: 180,
                         margin: 1,
                         errorCorrectionLevel: 'M'
                     });
@@ -586,6 +588,9 @@
             `;
 
             showToast(`${count}枚のQRコードを生成しました`, 'success');
+            
+            // プレビューセクションにスクロール
+            document.getElementById('qr-preview').scrollIntoView({ behavior: 'smooth' });
         }
 
         // 発行履歴を保存
