@@ -161,11 +161,18 @@
         /* A4用紙サイズ（210mm x 297mm）*/
         .print-sheet {
             width: 210mm;
-            min-height: 297mm;
+            height: 297mm; /* min-heightからheightに変更して白紙ページを防止 */
+            max-height: 297mm;
             margin: 0 auto;
             background: white;
             position: relative;
             page-break-after: always;
+            page-break-inside: avoid;
+            overflow: hidden; /* はみ出し防止 */
+        }
+        /* 最後のシートはpage-break-afterを無効化 */
+        .print-sheet:last-child {
+            page-break-after: auto;
         }
         /* エーワン 72212: 86.4mm x 42.3mm, 12面 (2列 x 6段) */
         .sheet-72212 {
@@ -175,47 +182,52 @@
         .sheet-72212 .qr-grid {
             display: grid;
             grid-template-columns: repeat(2, 86.4mm);
-            grid-template-rows: repeat(6, 46.6mm);
+            grid-template-rows: repeat(6, 42.3mm); /* 46.6mmから42.3mmに修正（実際のラベル高さ） */
         }
         .sheet-72212 .qr-cell {
             width: 86.4mm;
-            height: 46.6mm;
+            height: 42.3mm; /* ラベル高さいっぱい */
             display: flex;
             flex-direction: row;
             align-items: center;
             justify-content: flex-start;
-            padding: 3mm;
+            padding: 1mm; /* パディングを最小化 */
             border: 0.5px dashed #eee;
+            overflow: hidden;
         }
         .sheet-72212 .qr-cell .qr-image {
             flex-shrink: 0;
-            margin-right: 4mm;
+            margin-right: 2mm; /* マージンを縮小 */
         }
         .sheet-72212 .qr-cell canvas {
-            width: 35mm !important;
-            height: 35mm !important;
+            width: 40mm !important; /* QRを大きく（35mm→40mm） */
+            height: 40mm !important;
         }
         .sheet-72212 .qr-cell .qr-info {
             flex: 1;
             display: flex;
             flex-direction: column;
             justify-content: center;
+            overflow: hidden;
         }
         .sheet-72212 .qr-cell .product-name {
-            font-size: 14pt;
+            font-size: 18pt; /* 文字を大きく（14pt→18pt） */
             font-weight: bold;
             color: #8B0000;
-            margin-bottom: 2mm;
-            line-height: 1.2;
+            margin-bottom: 1mm;
+            line-height: 1.1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .sheet-72212 .qr-cell .qr-code-text {
-            font-size: 11pt;
+            font-size: 13pt; /* 文字を大きく（11pt→13pt） */
             font-family: monospace;
             color: #333;
-            margin-bottom: 1mm;
+            margin-bottom: 0.5mm;
         }
         .sheet-72212 .qr-cell .box-info {
-            font-size: 9pt;
+            font-size: 11pt; /* 文字を大きく（9pt→11pt） */
             color: #666;
         }
         .toast {
@@ -256,6 +268,16 @@
             background: #f9f9f9;
         }
         @media print {
+            @page {
+                size: A4;
+                margin: 0;
+            }
+            html, body {
+                width: 210mm;
+                height: 297mm;
+                margin: 0;
+                padding: 0;
+            }
             body * {
                 visibility: hidden;
             }
@@ -266,16 +288,33 @@
                 position: absolute;
                 left: 0;
                 top: 0;
-                width: 100%;
+                width: 210mm;
                 padding: 0;
                 border: none;
+                margin: 0;
             }
             .print-sheet {
+                width: 210mm;
+                height: 297mm;
+                max-height: 297mm;
                 margin: 0;
+                padding-top: 8.8mm;
+                padding-left: 18.6mm;
                 page-break-after: always;
+                page-break-inside: avoid;
+                overflow: hidden;
+                box-sizing: border-box;
+            }
+            .print-sheet:last-child {
+                page-break-after: auto;
+            }
+            .sheet-72212 .qr-grid {
+                grid-template-rows: repeat(6, 42.3mm);
             }
             .sheet-72212 .qr-cell {
                 border: none;
+                height: 42.3mm;
+                overflow: hidden;
             }
             .no-print {
                 display: none !important;
