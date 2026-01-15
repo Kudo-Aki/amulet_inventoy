@@ -2,12 +2,14 @@
  * お守り在庫管理アプリ - メインスクリプト
  * 
  * 機能:
- * - モード選択（納品/棚卸）
+ * - モード選択（納品/出庫/棚卸）
  * - QRコード連続読み取り
  * - 読み取り確認画面
  * - 重複検知・警告
  * - 商品別集計
  * - CSV出力（ダウンロード＆メール送信）
+ * - 在庫連動（納品で増加、出庫で減少）
+ * - 在庫不足アラート
  */
 
 // ========================================
@@ -30,7 +32,7 @@ const DEFAULT_MASTER = {
 
 // セッションデータ
 let session = {
-    mode: null,           // 'delivery' or 'inventory'
+    mode: null,           // 'delivery', 'shipment', or 'inventory'
     startTime: null,
     scannedBoxes: [],     // { qrCode, productCode, year, boxNumber, productName, timestamp }
     duplicateAttempts: [] // 重複読み取り試行ログ
@@ -61,6 +63,7 @@ const elements = {
     
     // モード選択
     btnDelivery: document.getElementById('btn-delivery'),
+    btnShipment: document.getElementById('btn-shipment'),
     btnInventory: document.getElementById('btn-inventory'),
     
     // 確認ダイアログ
@@ -96,7 +99,11 @@ const elements = {
     
     // トースト
     successToast: document.getElementById('success-toast'),
-    toastMessage: document.getElementById('toast-message')
+    toastMessage: document.getElementById('toast-message'),
+    
+    // 在庫アラート
+    stockAlertBanner: document.getElementById('stock-alert-banner'),
+    alertText: document.getElementById('alert-text')
 };
 
 // ========================================
@@ -108,11 +115,13 @@ document.addEventListener('DOMContentLoaded', () => {
     loadMasterFromStorage();
     createScanConfirmDialog();
     createEmailDialog();
+    checkStockAlerts();
 });
 
 function initEventListeners() {
     // モード選択ボタン
     elements.btnDelivery.addEventListener('click', () => showConfirmDialog('delivery'));
+    elements.btnShipment.addEventListener('click', () => showConfirmDialog('shipment'));
     elements.btnInventory.addEventListener('click', () => showConfirmDialog('inventory'));
     
     // 確認ダイアログ
@@ -133,6 +142,40 @@ function initEventListeners() {
 }
 
 // ========================================
+// 在庫アラートチェック
+// ========================================
+
+function checkStockAlerts() {
+    const lowItems = getLowStockItems();
+    
+    if (lowItems.length > 0) {
+        elements.stockAlertBanner.classList.add('show');
+        elements.alertText.textContent = `在庫不足: ${lowItems.length}種類のお守り`;
+    } else {
+        elements.stockAlertBanner.classList.remove('show');
+    }
+}
+
+function getLowStockItems() {
+    const stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
+    const lowItems = [];
+    
+    Object.keys(productMaster).forEach(code => {
+        const stock = stockData[code] || { stock: 0, alertThreshold: 10 };
+        if (stock.stock <= stock.alertThreshold) {
+            lowItems.push({
+                code: code,
+                name: productMaster[code].name,
+                stock: stock.stock,
+                threshold: stock.alertThreshold
+            });
+        }
+    });
+    
+    return lowItems;
+}
+
+// ========================================
 // 読み取り確認ダイアログの作成
 // ========================================
 
@@ -142,14 +185,18 @@ function createScanConfirmDialog() {
     dialog.className = 'dialog-overlay hidden';
     dialog.innerHTML = `
         <div class="dialog" style="max-width: 350px;">
-            <div class="dialog-header" style="background: #4CAF50; color: white; padding: 16px; text-align: center;">
-                <span style="font-size: 2rem;">📦</span>
+            <div class="dialog-header" id="scan-confirm-header" style="background: #4CAF50; color: white; padding: 16px; text-align: center;">
+                <span style="font-size: 2rem;" id="scan-confirm-icon">📦</span>
                 <div style="font-size: 1.2rem; font-weight: bold; margin-top: 8px;">読み取り確認</div>
             </div>
             <div class="dialog-body" style="padding: 20px; text-align: center;">
                 <div id="scan-confirm-product" style="font-size: 1.5rem; font-weight: bold; color: #8B0000; margin-bottom: 12px;"></div>
                 <div id="scan-confirm-qr" style="font-family: monospace; font-size: 1rem; color: #666; margin-bottom: 8px;"></div>
-                <div id="scan-confirm-quantity" style="font-size: 0.9rem; color: #999;"></div>
+                <div id="scan-confirm-quantity" style="font-size: 0.9rem; color: #999; margin-bottom: 12px;"></div>
+                <div id="scan-confirm-stock" class="stock-display" style="display: none;">
+                    <span class="stock-label">現在庫:</span>
+                    <span class="stock-value" id="scan-confirm-stock-value">0</span>
+                </div>
             </div>
             <div class="dialog-footer" style="display: flex; gap: 12px; padding: 16px;">
                 <button id="btn-scan-cancel" class="btn btn-secondary" style="flex: 1; padding: 14px; font-size: 1rem;">キャンセル</button>
@@ -174,9 +221,47 @@ function showScanConfirmDialog(scanData) {
     const product = productMaster[scanData.productCode];
     const quantity = product ? product.quantity : '不明';
     
+    // モードに応じてダイアログの色とアイコンを変更
+    const header = document.getElementById('scan-confirm-header');
+    const icon = document.getElementById('scan-confirm-icon');
+    const registerBtn = document.getElementById('btn-scan-register');
+    
+    if (session.mode === 'delivery') {
+        header.style.background = 'linear-gradient(135deg, #4CAF50 0%, #388E3C 100%)';
+        icon.textContent = '📦';
+        registerBtn.style.background = '#4CAF50';
+        registerBtn.textContent = '登録する（在庫+）';
+    } else if (session.mode === 'shipment') {
+        header.style.background = 'linear-gradient(135deg, #FF5722 0%, #E64A19 100%)';
+        icon.textContent = '🚚';
+        registerBtn.style.background = '#FF5722';
+        registerBtn.textContent = '登録する（在庫-）';
+    } else {
+        header.style.background = 'linear-gradient(135deg, #2196F3 0%, #1976D2 100%)';
+        icon.textContent = '📋';
+        registerBtn.style.background = '#2196F3';
+        registerBtn.textContent = '登録する';
+    }
+    
     document.getElementById('scan-confirm-product').textContent = scanData.productName;
     document.getElementById('scan-confirm-qr').textContent = scanData.qrCode;
     document.getElementById('scan-confirm-quantity').textContent = `入数: ${quantity}個/箱`;
+    
+    // 在庫表示（納品・出庫モードのみ）
+    const stockDisplay = document.getElementById('scan-confirm-stock');
+    if (session.mode === 'delivery' || session.mode === 'shipment') {
+        const currentStock = getStock(scanData.productCode);
+        const stockValue = document.getElementById('scan-confirm-stock-value');
+        stockValue.textContent = `${currentStock}個`;
+        
+        const stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
+        const threshold = stockData[scanData.productCode] ? stockData[scanData.productCode].alertThreshold : 10;
+        stockValue.className = currentStock <= threshold ? 'stock-value low' : 'stock-value normal';
+        
+        stockDisplay.style.display = 'flex';
+    } else {
+        stockDisplay.style.display = 'none';
+    }
     
     document.getElementById('scan-confirm-dialog').classList.remove('hidden');
     
@@ -197,6 +282,16 @@ function confirmScanRegister() {
         // セッションに追加
         session.scannedBoxes.push(pendingScanData);
         
+        // 在庫更新（納品・出庫モードのみ）
+        const product = productMaster[pendingScanData.productCode];
+        const quantity = product ? product.quantity : 0;
+        
+        if (session.mode === 'delivery') {
+            updateStock(pendingScanData.productCode, quantity, 'add', `QR: ${pendingScanData.qrCode}`);
+        } else if (session.mode === 'shipment') {
+            updateStock(pendingScanData.productCode, quantity, 'remove', `QR: ${pendingScanData.qrCode}`);
+        }
+        
         // UI更新
         updateScanUI(pendingScanData);
         showSuccessToast(`${pendingScanData.productName} を登録しました`);
@@ -205,6 +300,55 @@ function confirmScanRegister() {
     document.getElementById('scan-confirm-dialog').classList.add('hidden');
     pendingScanData = null;
     scanPaused = false;
+}
+
+// ========================================
+// 在庫管理関数
+// ========================================
+
+function getStock(productCode) {
+    const stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
+    return stockData[productCode] ? stockData[productCode].stock : 0;
+}
+
+function updateStock(productCode, quantity, operation, note) {
+    const stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
+    
+    if (!stockData[productCode]) {
+        stockData[productCode] = { stock: 0, alertThreshold: 10 };
+    }
+    
+    if (operation === 'add') {
+        stockData[productCode].stock += quantity;
+    } else if (operation === 'remove') {
+        stockData[productCode].stock = Math.max(0, stockData[productCode].stock - quantity);
+    }
+    
+    localStorage.setItem('omamori_stock', JSON.stringify(stockData));
+    
+    // 履歴に追加
+    addStockHistory(operation === 'add' ? 'in' : 'out', productCode, quantity, note);
+}
+
+function addStockHistory(type, productCode, quantity, note) {
+    const history = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
+    const productName = productMaster[productCode] ? productMaster[productCode].name : productCode;
+    
+    history.unshift({
+        date: new Date().toLocaleString('ja-JP'),
+        type: type,
+        productCode: productCode,
+        productName: productName,
+        quantity: quantity,
+        note: note || ''
+    });
+
+    // 最大500件まで保存
+    if (history.length > 500) {
+        history.pop();
+    }
+
+    localStorage.setItem('omamori_stock_history', JSON.stringify(history));
 }
 
 // ========================================
@@ -285,10 +429,18 @@ function showScreen(screenId) {
 function showConfirmDialog(mode) {
     session.mode = mode;
     
-    const modeText = mode === 'delivery' ? '納品モード' : '棚卸モード';
-    const modeDesc = mode === 'delivery' 
-        ? '新しく届いたお守りの箱をスキャンして登録します。'
-        : '現在の在庫にあるお守りの箱をスキャンして確認します。';
+    let modeText, modeDesc;
+    
+    if (mode === 'delivery') {
+        modeText = '納品モード';
+        modeDesc = '新しく届いたお守りの箱をスキャンして登録します。在庫数が自動で増加します。';
+    } else if (mode === 'shipment') {
+        modeText = '出庫モード';
+        modeDesc = '出庫するお守りの箱をスキャンして登録します。在庫数が自動で減少します。';
+    } else {
+        modeText = '棚卸モード';
+        modeDesc = '現在の在庫にあるお守りの箱をスキャンして確認します。在庫数は変わりません。';
+    }
     
     elements.dialogModeIndicator.textContent = modeText;
     elements.dialogModeIndicator.className = `dialog-header ${mode}`;
@@ -317,7 +469,15 @@ function startSession() {
     scanPaused = false;
     
     // UI更新
-    const modeText = session.mode === 'delivery' ? '📦 納品モード' : '📋 棚卸モード';
+    let modeText, modeIcon;
+    if (session.mode === 'delivery') {
+        modeText = '📦 納品モード';
+    } else if (session.mode === 'shipment') {
+        modeText = '🚚 出庫モード';
+    } else {
+        modeText = '📋 棚卸モード';
+    }
+    
     elements.currentModeIndicator.textContent = modeText;
     elements.currentModeIndicator.className = `mode-indicator ${session.mode}`;
     
@@ -341,10 +501,12 @@ function confirmBackToMode() {
         }
     }
     stopQrScanner();
+    checkStockAlerts();
     showScreen('mode-select-screen');
 }
 
 function startNewSession() {
+    checkStockAlerts();
     showScreen('mode-select-screen');
 }
 
@@ -561,13 +723,41 @@ function showSummary() {
     const summary = calculateSummary();
     
     // UI更新
-    const modeText = session.mode === 'delivery' ? '📦 納品' : '📋 棚卸';
+    let modeText;
+    if (session.mode === 'delivery') {
+        modeText = '📦 納品';
+    } else if (session.mode === 'shipment') {
+        modeText = '🚚 出庫';
+    } else {
+        modeText = '📋 棚卸';
+    }
+    
     elements.summaryModeIndicator.textContent = modeText;
     elements.summaryModeIndicator.className = `mode-indicator ${session.mode}`;
     
     elements.summaryDatetime.textContent = formatDateTime(session.startTime);
     elements.summaryTotalBoxes.textContent = summary.totalBoxes;
     elements.summaryTotalQuantity.textContent = summary.totalQuantity;
+    
+    // 在庫更新メッセージ
+    const stockUpdateInfo = document.getElementById('stock-update-info');
+    const stockUpdateMessage = document.getElementById('stock-update-message');
+    
+    if (session.mode === 'delivery') {
+        stockUpdateInfo.style.display = 'block';
+        stockUpdateInfo.style.background = '#e8f5e9';
+        stockUpdateInfo.style.borderColor = '#4CAF50';
+        stockUpdateMessage.style.color = '#2e7d32';
+        stockUpdateMessage.textContent = `✅ 在庫が ${summary.totalQuantity}個 増加しました`;
+    } else if (session.mode === 'shipment') {
+        stockUpdateInfo.style.display = 'block';
+        stockUpdateInfo.style.background = '#fff3e0';
+        stockUpdateInfo.style.borderColor = '#FF9800';
+        stockUpdateMessage.style.color = '#e65100';
+        stockUpdateMessage.textContent = `📤 在庫が ${summary.totalQuantity}個 減少しました`;
+    } else {
+        stockUpdateInfo.style.display = 'none';
+    }
     
     // テーブル生成
     elements.summaryTbody.innerHTML = '';
@@ -656,7 +846,14 @@ function exportCsvDownload() {
 
 async function shareCsvFile() {
     const summary = calculateSummary();
-    const modeText = session.mode === 'delivery' ? '納品' : '棚卸';
+    let modeText;
+    if (session.mode === 'delivery') {
+        modeText = '納品';
+    } else if (session.mode === 'shipment') {
+        modeText = '出庫';
+    } else {
+        modeText = '棚卸';
+    }
     const dateStr = formatDateTime(session.startTime);
     const filename = generateCsvFilename();
     
@@ -786,5 +983,8 @@ window.omamoriApp = {
     resetMaster: () => {
         productMaster = { ...DEFAULT_MASTER };
         saveMasterToStorage();
-    }
+    },
+    getStock: getStock,
+    updateStock: updateStock,
+    checkStockAlerts: checkStockAlerts
 };
