@@ -18,8 +18,87 @@
     <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-48.png">
     <title>お守り在庫管理</title>
     <link rel="stylesheet" href="css/style.css">
+    <style>
+        /* 出庫モード用の追加スタイル */
+        .mode-btn.shipment {
+            background: linear-gradient(135deg, #FF5722 0%, #E64A19 100%);
+            color: white;
+        }
+        .mode-indicator.shipment {
+            background: #FF5722;
+        }
+        .dialog-header.shipment {
+            background: linear-gradient(135deg, #FF5722 0%, #E64A19 100%);
+            color: white;
+        }
+        
+        /* 在庫アラートバナー */
+        .stock-alert-banner {
+            background: #ffebee;
+            border-bottom: 2px solid #f44336;
+            padding: 12px 16px;
+            display: none;
+        }
+        .stock-alert-banner.show {
+            display: block;
+        }
+        .stock-alert-banner .alert-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .stock-alert-banner .alert-text {
+            color: #c62828;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .stock-alert-banner .alert-link {
+            color: #c62828;
+            text-decoration: underline;
+            font-size: 0.9rem;
+        }
+        
+        /* 在庫表示 */
+        .stock-display {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin-top: 8px;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .stock-display .stock-label {
+            color: #666;
+        }
+        .stock-display .stock-value {
+            font-weight: bold;
+        }
+        .stock-display .stock-value.low {
+            color: #f44336;
+        }
+        .stock-display .stock-value.normal {
+            color: #4CAF50;
+        }
+    </style>
 </head>
 <body>
+    <!-- 在庫アラートバナー -->
+    <div id="stock-alert-banner" class="stock-alert-banner">
+        <div class="alert-content">
+            <span class="alert-text">
+                <span>⚠️</span>
+                <span id="alert-text">在庫不足のお守りがあります</span>
+            </span>
+            <a href="admin/stock-manager.html" class="alert-link">確認する →</a>
+        </div>
+    </div>
+
     <!-- モード選択画面 -->
     <div id="mode-select-screen" class="screen active">
         <div class="header">
@@ -33,12 +112,17 @@
                 <button id="btn-delivery" class="mode-btn delivery">
                     <span class="mode-icon">📦</span>
                     <span class="mode-title">納品モード</span>
-                    <span class="mode-desc">新しく届いたお守りを登録</span>
+                    <span class="mode-desc">新しく届いたお守りを登録<br><small>→ 在庫が増えます</small></span>
+                </button>
+                <button id="btn-shipment" class="mode-btn shipment">
+                    <span class="mode-icon">🚚</span>
+                    <span class="mode-title">出庫モード</span>
+                    <span class="mode-desc">出庫するお守りを登録<br><small>→ 在庫が減ります</small></span>
                 </button>
                 <button id="btn-inventory" class="mode-btn inventory">
                     <span class="mode-icon">📋</span>
                     <span class="mode-title">棚卸モード</span>
-                    <span class="mode-desc">現在の在庫を確認</span>
+                    <span class="mode-desc">現在の在庫を確認<br><small>→ 在庫は変わりません</small></span>
                 </button>
             </div>
         </div>
@@ -107,6 +191,9 @@
                 <p>読み取り日時: <span id="summary-datetime"></span></p>
                 <p>総箱数: <strong id="summary-total-boxes">0</strong>箱</p>
                 <p>総数量: <strong id="summary-total-quantity">0</strong>体</p>
+            </div>
+            <div id="stock-update-info" class="stock-update-info" style="background:#e8f5e9;border:1px solid #4CAF50;border-radius:8px;padding:12px;margin-bottom:16px;display:none;">
+                <p style="color:#2e7d32;font-weight:bold;margin-bottom:8px;" id="stock-update-message"></p>
             </div>
             <div class="summary-table-container">
                 <table id="summary-table" class="summary-table">
