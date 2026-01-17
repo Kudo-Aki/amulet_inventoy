@@ -310,6 +310,7 @@
 
     <div id="toast" class="toast"></div>
 
+    <script src="../js/api.js"></script>
     <script>
         // デフォルトマスタ（単価を追加）
         const DEFAULT_MASTER = {
@@ -328,18 +329,36 @@
         let master = {};
 
         // 初期化
-        document.addEventListener('DOMContentLoaded', () => {
-            loadMaster();
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadMaster();
             renderTable();
         });
 
         // マスタ読み込み
-        function loadMaster() {
+        async function loadMaster() {
+            // APIが有効な場合はAPIから取得
+            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                try {
+                    const data = await fetchMasterData();
+                    if (data) {
+                        master = data;
+                        Object.keys(master).forEach(code => {
+                            if (master[code].unitPrice === undefined) {
+                                master[code].unitPrice = 0;
+                            }
+                        });
+                        return;
+                    }
+                } catch (e) {
+                    console.error('APIからのマスタ取得失敗:', e);
+                }
+            }
+            
+            // localStorageから取得（フォールバック）
             const stored = localStorage.getItem('omamori_master');
             if (stored) {
                 try {
                     master = JSON.parse(stored);
-                    // 既存データに単価がない場合は追加
                     Object.keys(master).forEach(code => {
                         if (master[code].unitPrice === undefined) {
                             master[code].unitPrice = 0;
@@ -459,8 +478,18 @@
         }
 
         // ブラウザに保存
-        function saveMaster() {
+        async function saveMaster() {
             localStorage.setItem('omamori_master', JSON.stringify(master));
+            
+            // APIにも保存
+            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                try {
+                    await saveMasterDataToApi(master);
+                } catch (e) {
+                    console.error('APIへのマスタ保存失敗:', e);
+                }
+            }
+            
             showToast('マスタを保存しました', 'success');
         }
 

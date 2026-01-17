@@ -503,6 +503,7 @@
 
     <div id="toast" class="toast"></div>
 
+    <script src="../js/api.js"></script>
     <script>
         // デフォルトマスタ
         const DEFAULT_MASTER = {
@@ -521,13 +522,13 @@
         let orderData = {}; // { productCode: { ordered: true/false, quantity: 発注数, deliveryDate: 納期 } }
 
         // 初期化
-        document.addEventListener('DOMContentLoaded', function() {
-            loadMaster();
-            loadStock();
-            loadOrders();
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadMaster();
+            await loadStock();
+            await loadOrders();
             renderStockTable();
             renderOrderTable();
-            loadHistory();
+            await loadHistory();
             checkAlerts();
             updateStats();
         });
@@ -544,12 +545,30 @@
         }
 
         // マスタ読み込み
-        function loadMaster() {
+        async function loadMaster() {
+            // APIが有効な場合はAPIから取得
+            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                try {
+                    const data = await fetchMasterData();
+                    if (data) {
+                        master = data;
+                        Object.keys(master).forEach(code => {
+                            if (master[code].unitPrice === undefined) {
+                                master[code].unitPrice = 0;
+                            }
+                        });
+                        return;
+                    }
+                } catch (e) {
+                    console.error('APIからのマスタ取得失敗:', e);
+                }
+            }
+            
+            // localStorageから取得（フォールバック）
             const stored = localStorage.getItem('omamori_master');
             if (stored) {
                 try {
                     master = JSON.parse(stored);
-                    // 単価がない場合は追加
                     Object.keys(master).forEach(code => {
                         if (master[code].unitPrice === undefined) {
                             master[code].unitPrice = 0;
@@ -564,7 +583,27 @@
         }
 
         // 在庫データ読み込み
-        function loadStock() {
+        async function loadStock() {
+            // APIが有効な場合はAPIから取得
+            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                try {
+                    const data = await fetchStockData();
+                    if (data && Object.keys(data).length > 0) {
+                        stockData = data;
+                        // マスタにあって在庫データにない商品を初期化
+                        Object.keys(master).forEach(code => {
+                            if (!stockData[code]) {
+                                stockData[code] = { stock: 0, safeStock: 10 };
+                            }
+                        });
+                        return;
+                    }
+                } catch (e) {
+                    console.error('APIからの在庫取得失敗:', e);
+                }
+            }
+            
+            // localStorageから取得（フォールバック）
             const stored = localStorage.getItem('omamori_stock');
             if (stored) {
                 try {
@@ -596,7 +635,27 @@
         }
 
         // 発注データ読み込み
-        function loadOrders() {
+        async function loadOrders() {
+            // APIが有効な場合はAPIから取得
+            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                try {
+                    const data = await fetchOrdersData();
+                    if (data && Object.keys(data).length > 0) {
+                        orderData = data;
+                        // マスタにあって発注データにない商品を初期化
+                        Object.keys(master).forEach(code => {
+                            if (!orderData[code]) {
+                                orderData[code] = { ordered: false, quantity: 0, deliveryDate: '' };
+                            }
+                        });
+                        return;
+                    }
+                } catch (e) {
+                    console.error('APIからの発注取得失敗:', e);
+                }
+            }
+            
+            // localStorageから取得（フォールバック）
             const stored = localStorage.getItem('omamori_orders');
             if (stored) {
                 try {
@@ -760,7 +819,7 @@
         }
 
         // 在庫保存
-        function saveStock() {
+        async function saveStock() {
             Object.keys(master).forEach(code => {
                 const stockInput = document.getElementById(`stock-${code}`);
                 const safeInput = document.getElementById(`safe-${code}`);
@@ -774,13 +833,23 @@
             });
 
             localStorage.setItem('omamori_stock', JSON.stringify(stockData));
+            
+            // APIにも保存
+            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                try {
+                    await saveStockDataToApi(stockData);
+                } catch (e) {
+                    console.error('APIへの在庫保存失敗:', e);
+                }
+            }
+            
             checkAlerts();
             updateStats();
             showToast('在庫データを保存しました', 'success');
         }
 
         // 発注状況保存
-        function saveOrders() {
+        async function saveOrders() {
             Object.keys(master).forEach(code => {
                 const statusSelect = document.getElementById(`order-status-${code}`);
                 const qtyInput = document.getElementById(`order-qty-${code}`);
@@ -796,6 +865,16 @@
             });
 
             localStorage.setItem('omamori_orders', JSON.stringify(orderData));
+            
+            // APIにも保存
+            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                try {
+                    await saveOrdersDataToApi(orderData);
+                } catch (e) {
+                    console.error('APIへの発注保存失敗:', e);
+                }
+            }
+            
             updateStats();
             showToast('発注状況を保存しました', 'success');
         }
@@ -909,8 +988,21 @@
         }
 
         // 履歴読み込み
-        function loadHistory() {
-            const history = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
+        async function loadHistory() {
+            let history = [];
+            
+            // APIが有効な場合はAPIから取得
+            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                try {
+                    history = await fetchHistoryData(100);
+                } catch (e) {
+                    console.error('APIからの履歴取得失敗:', e);
+                    history = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
+                }
+            } else {
+                history = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
+            }
+            
             const tbody = document.getElementById('history-tbody');
             tbody.innerHTML = '';
 
@@ -937,12 +1029,22 @@
         }
 
         // 履歴クリア
-        function clearHistory() {
+        async function clearHistory() {
             if (!confirm('在庫変動履歴をすべて削除しますか？')) {
                 return;
             }
             localStorage.removeItem('omamori_stock_history');
-            loadHistory();
+            
+            // APIの履歴もクリア
+            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                try {
+                    await clearHistoryDataToApi();
+                } catch (e) {
+                    console.error('APIの履歴クリア失敗:', e);
+                }
+            }
+            
+            await loadHistory();
             showToast('履歴を削除しました', 'success');
         }
 

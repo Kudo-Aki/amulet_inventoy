@@ -112,13 +112,13 @@ const elements = {
 // 初期化
 // ========================================
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     initEventListeners();
-    loadMasterFromStorage();
+    await loadMasterFromStorage();
     createScanConfirmDialog();
     createEmailDialog();
     createSafeStockWarningDialog();
-    checkStockAlerts();
+    await checkStockAlerts();
 });
 
 function initEventListeners() {
@@ -149,8 +149,8 @@ function initEventListeners() {
 // 安心在庫アラートチェック
 // ========================================
 
-function checkStockAlerts() {
-    const lowItems = getLowStockItems();
+async function checkStockAlerts() {
+    const lowItems = await getLowStockItems();
     
     if (lowItems.length > 0) {
         elements.stockAlertBanner.classList.add('show');
@@ -160,8 +160,20 @@ function checkStockAlerts() {
     }
 }
 
-function getLowStockItems() {
-    const stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
+async function getLowStockItems() {
+    // APIから在庫データを取得
+    let stockData = {};
+    if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+        try {
+            stockData = await fetchStockData();
+        } catch (e) {
+            console.error('APIからの在庫取得失敗:', e);
+            stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
+        }
+    } else {
+        stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
+    }
+    
     const lowItems = [];
     
     Object.keys(productMaster).forEach(code => {
@@ -315,7 +327,7 @@ function cancelScanConfirm() {
     scanPaused = false;
 }
 
-function confirmScanRegister() {
+async function confirmScanRegister() {
     if (pendingScanData) {
         // セッションに追加
         session.scannedBoxes.push(pendingScanData);
@@ -325,10 +337,10 @@ function confirmScanRegister() {
         const quantity = product ? product.quantity : 0;
         
         if (session.mode === 'delivery') {
-            updateStock(pendingScanData.productCode, quantity, 'add', `QR: ${pendingScanData.qrCode}`);
+            await updateStock(pendingScanData.productCode, quantity, 'add', `QR: ${pendingScanData.qrCode}`);
             showSuccessToast(`${pendingScanData.productName} を登録しました`);
         } else if (session.mode === 'shipment') {
-            const result = updateStockWithCheck(pendingScanData.productCode, quantity, `QR: ${pendingScanData.qrCode}`);
+            const result = await updateStockWithCheck(pendingScanData.productCode, quantity, `QR: ${pendingScanData.qrCode}`);
             showSuccessToast(`${pendingScanData.productName} を登録しました`);
             
             // 安心在庫を下回った場合は警告を表示
@@ -370,7 +382,7 @@ function getSafeStock(productCode) {
     return 10;
 }
 
-function updateStock(productCode, quantity, operation, note) {
+async function updateStock(productCode, quantity, operation, note) {
     const stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
     
     if (!stockData[productCode]) {
@@ -379,18 +391,68 @@ function updateStock(productCode, quantity, operation, note) {
     
     if (operation === 'add') {
         stockData[productCode].stock += quantity;
+        
+        // 納品時は発注数量を自動減少
+        await updateOrderQuantityOnDelivery(productCode, quantity);
     } else if (operation === 'remove') {
         stockData[productCode].stock = Math.max(0, stockData[productCode].stock - quantity);
     }
     
     localStorage.setItem('omamori_stock', JSON.stringify(stockData));
     
+    // APIにも保存
+    if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+        try {
+            await updateSingleStockToApi(productCode, stockData[productCode].stock, stockData[productCode].safeStock);
+        } catch (e) {
+            console.error('APIへの在庫更新失敗:', e);
+        }
+    }
+    
     // 履歴に追加
-    addStockHistory(operation === 'add' ? 'in' : 'out', productCode, quantity, note);
+    await addStockHistory(operation === 'add' ? 'in' : 'out', productCode, quantity, note);
+}
+
+// 納品時に発注数量を自動減少させる
+async function updateOrderQuantityOnDelivery(productCode, deliveredQuantity) {
+    const orderData = JSON.parse(localStorage.getItem('omamori_orders') || '{}');
+    
+    // その商品の発注データがあるか確認
+    if (!orderData[productCode]) {
+        return; // 発注データがない場合は何もしない
+    }
+    
+    // 発注済みの場合のみ処理
+    if (orderData[productCode].ordered && orderData[productCode].quantity > 0) {
+        // 発注数量を減少
+        orderData[productCode].quantity = Math.max(0, orderData[productCode].quantity - deliveredQuantity);
+        
+        // 発注数量が0になったら未発注に変更
+        if (orderData[productCode].quantity === 0) {
+            orderData[productCode].ordered = false;
+            orderData[productCode].deliveryDate = '';
+        }
+        
+        localStorage.setItem('omamori_orders', JSON.stringify(orderData));
+        
+        // APIにも保存
+        if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+            try {
+                await updateSingleOrderToApi(
+                    productCode,
+                    orderData[productCode].ordered,
+                    orderData[productCode].quantity,
+                    orderData[productCode].deliveryDate
+                );
+            } catch (e) {
+                console.error('APIへの発注更新失敗:', e);
+            }
+        }
+    }
 }
 
 // 出庫時の在庫更新（安心在庫チェック付き）
-function updateStockWithCheck(productCode, quantity, note) {
+async function updateStockWithCheck(productCode, quantity, note) {
     const stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
     
     if (!stockData[productCode]) {
@@ -407,8 +469,17 @@ function updateStockWithCheck(productCode, quantity, note) {
     
     localStorage.setItem('omamori_stock', JSON.stringify(stockData));
     
+    // APIにも保存
+    if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+        try {
+            await updateSingleStockToApi(productCode, afterStock, safeStock);
+        } catch (e) {
+            console.error('APIへの在庫更新失敗:', e);
+        }
+    }
+    
     // 履歴に追加
-    addStockHistory('out', productCode, quantity, note);
+    await addStockHistory('out', productCode, quantity, note);
     
     // 安心在庫を下回ったかチェック
     const productName = productMaster[productCode] ? productMaster[productCode].name : productCode;
@@ -441,18 +512,21 @@ function updateStockWithCheck(productCode, quantity, note) {
     };
 }
 
-function addStockHistory(type, productCode, quantity, note) {
-    const history = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
+async function addStockHistory(type, productCode, quantity, note) {
     const productName = productMaster[productCode] ? productMaster[productCode].name : productCode;
     
-    history.unshift({
+    const record = {
         date: new Date().toLocaleString('ja-JP'),
         type: type,
         productCode: productCode,
         productName: productName,
         quantity: quantity,
         note: note || ''
-    });
+    };
+    
+    // localStorageに保存
+    const history = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
+    history.unshift(record);
 
     // 最大500件まで保存
     if (history.length > 500) {
@@ -460,6 +534,15 @@ function addStockHistory(type, productCode, quantity, note) {
     }
 
     localStorage.setItem('omamori_stock_history', JSON.stringify(history));
+    
+    // APIにも保存
+    if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+        try {
+            await addHistoryRecordToApi(record);
+        } catch (e) {
+            console.error('APIへの履歴追加失敗:', e);
+        }
+    }
 }
 
 // ========================================
@@ -1013,7 +1096,27 @@ function formatDateForFilename(date) {
     return `${year}${month}${day}_${hour}${minute}`;
 }
 
-function loadMasterFromStorage() {
+async function loadMasterFromStorage() {
+    // APIが有効な場合はAPIから取得
+    if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+        try {
+            const master = await fetchMasterData();
+            if (master) {
+                productMaster = master;
+                // 単価がない場合は追加
+                Object.keys(productMaster).forEach(code => {
+                    if (productMaster[code].unitPrice === undefined) {
+                        productMaster[code].unitPrice = 0;
+                    }
+                });
+                return;
+            }
+        } catch (e) {
+            console.error('APIからのマスタ取得失敗:', e);
+        }
+    }
+    
+    // localStorageから取得（フォールバック）
     const stored = localStorage.getItem('omamori_master');
     if (stored) {
         try {

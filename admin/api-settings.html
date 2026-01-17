@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API設定 - お守り在庫管理</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #8B0000 0%, #B22222 100%);
+            color: white;
+            padding: 16px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .section h2 {
+            color: #8B0000;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #8B0000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .info-box {
+            background: #e3f2fd;
+            border: 1px solid #2196F3;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            color: #1565C0;
+        }
+        .warning-box {
+            background: #fff3e0;
+            border: 1px solid #ff9800;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            color: #e65100;
+        }
+        .success-box {
+            background: #e8f5e9;
+            border: 1px solid #4caf50;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            color: #2e7d32;
+        }
+        .error-box {
+            background: #ffebee;
+            border: 1px solid #f44336;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            color: #c62828;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        .form-group input[type="text"],
+        .form-group input[type="url"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #8B0000;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #8B0000;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #6B0000;
+        }
+        .btn-secondary {
+            background: #666;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #555;
+        }
+        .btn-success {
+            background: #4caf50;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #388e3c;
+        }
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #d32f2f;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        .status-connected {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .status-disconnected {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #8B0000;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            border-radius: 4px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .toast.show {
+            opacity: 1;
+        }
+        .toast.success {
+            background: #4caf50;
+        }
+        .toast.error {
+            background: #f44336;
+        }
+        .step-list {
+            counter-reset: step;
+            list-style: none;
+            padding: 0;
+        }
+        .step-list li {
+            counter-increment: step;
+            padding: 12px 0 12px 50px;
+            position: relative;
+            border-bottom: 1px solid #eee;
+        }
+        .step-list li:last-child {
+            border-bottom: none;
+        }
+        .step-list li::before {
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 12px;
+            width: 32px;
+            height: 32px;
+            background: #8B0000;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .code-block {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            margin: 8px 0;
+            word-break: break-all;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #8B0000;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⚙️ API設定</h1>
+    </div>
+
+    <div class="container">
+        <!-- 現在の状態 -->
+        <div class="section">
+            <h2>📡 接続状態</h2>
+            <div id="status-indicator" class="status-indicator status-disconnected">
+                <span id="status-icon">❌</span>
+                <span id="status-text">未接続</span>
+            </div>
+            <p id="status-detail">Googleスプレッドシートとの連携が設定されていません。</p>
+        </div>
+
+        <!-- API URL設定 -->
+        <div class="section">
+            <h2>🔗 API URL設定</h2>
+            <div class="info-box">
+                Google Apps Script（GAS）をデプロイして取得したWebアプリURLを入力してください。
+            </div>
+            
+            <div class="form-group">
+                <label for="api-url">API URL</label>
+                <input type="url" id="api-url" placeholder="https://script.google.com/macros/s/xxxxx/exec">
+            </div>
+            
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="saveApiUrl()">💾 保存</button>
+                <button class="btn btn-success" onclick="testConnection()">🔍 接続テスト</button>
+                <button class="btn btn-danger" onclick="clearApiUrl()">🗑️ 削除</button>
+            </div>
+            
+            <div id="test-result" class="hidden" style="margin-top: 16px;"></div>
+        </div>
+
+        <!-- セットアップ手順 -->
+        <div class="section">
+            <h2>📋 セットアップ手順</h2>
+            <div class="warning-box">
+                初回セットアップはPCでの作業を推奨します。
+            </div>
+            
+            <ol class="step-list">
+                <li>
+                    <strong>Google Apps Scriptを開く</strong><br>
+                    <a href="https://script.google.com/" target="_blank">script.google.com</a> にアクセスし、「新しいプロジェクト」を作成
+                </li>
+                <li>
+                    <strong>スクリプトを貼り付け</strong><br>
+                    提供された「Code.gs」の内容をエディタに貼り付けて保存
+                </li>
+                <li>
+                    <strong>初期化を実行</strong><br>
+                    「initializeSpreadsheet」関数を選択して実行（初回のみ権限承認が必要）
+                </li>
+                <li>
+                    <strong>Webアプリとしてデプロイ</strong><br>
+                    「デプロイ」→「新しいデプロイ」→「ウェブアプリ」を選択<br>
+                    アクセスできるユーザー: 「全員」に設定してデプロイ
+                </li>
+                <li>
+                    <strong>URLをコピー</strong><br>
+                    表示されたWebアプリURLをコピーして上の入力欄に貼り付け
+                </li>
+                <li>
+                    <strong>接続テスト</strong><br>
+                    「接続テスト」ボタンをクリックして正常に接続できることを確認
+                </li>
+            </ol>
+        </div>
+
+        <!-- データ移行 -->
+        <div class="section">
+            <h2>📤 データ移行</h2>
+            <div class="info-box">
+                現在ブラウザに保存されているデータをGoogleスプレッドシートに移行できます。
+            </div>
+            
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="migrateData()">📤 データを移行</button>
+            </div>
+            
+            <div id="migrate-result" class="hidden" style="margin-top: 16px;"></div>
+        </div>
+
+        <a href="index.html" class="back-link">← 管理メニューに戻る</a>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        // 初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadApiUrl();
+            updateStatus();
+        });
+
+        // API URL読み込み
+        function loadApiUrl() {
+            const url = localStorage.getItem('omamori_api_url') || '';
+            document.getElementById('api-url').value = url;
+        }
+
+        // API URL保存
+        function saveApiUrl() {
+            const url = document.getElementById('api-url').value.trim();
+            
+            if (url && !url.startsWith('https://script.google.com/')) {
+                showToast('有効なGoogle Apps Script URLを入力してください', 'error');
+                return;
+            }
+            
+            localStorage.setItem('omamori_api_url', url);
+            updateStatus();
+            showToast('API URLを保存しました', 'success');
+        }
+
+        // API URL削除
+        function clearApiUrl() {
+            if (!confirm('API URLを削除しますか？\nスプレッドシートとの連携が解除されます。')) {
+                return;
+            }
+            
+            localStorage.removeItem('omamori_api_url');
+            document.getElementById('api-url').value = '';
+            updateStatus();
+            showToast('API URLを削除しました', 'success');
+        }
+
+        // 状態更新
+        function updateStatus() {
+            const url = localStorage.getItem('omamori_api_url');
+            const indicator = document.getElementById('status-indicator');
+            const icon = document.getElementById('status-icon');
+            const text = document.getElementById('status-text');
+            const detail = document.getElementById('status-detail');
+            
+            if (url) {
+                indicator.className = 'status-indicator status-connected';
+                icon.textContent = '✅';
+                text.textContent = '設定済み';
+                detail.textContent = 'API URLが設定されています。接続テストで動作を確認してください。';
+            } else {
+                indicator.className = 'status-indicator status-disconnected';
+                icon.textContent = '❌';
+                text.textContent = '未接続';
+                detail.textContent = 'Googleスプレッドシートとの連携が設定されていません。';
+            }
+        }
+
+        // 接続テスト
+        async function testConnection() {
+            const url = document.getElementById('api-url').value.trim();
+            const resultDiv = document.getElementById('test-result');
+            
+            if (!url) {
+                showToast('API URLを入力してください', 'error');
+                return;
+            }
+            
+            resultDiv.className = 'info-box';
+            resultDiv.innerHTML = '<span class="loading"></span>接続テスト中...';
+            resultDiv.classList.remove('hidden');
+            
+            try {
+                const response = await fetch(url + '?action=test', {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'success-box';
+                    resultDiv.innerHTML = `
+                        ✅ <strong>接続成功！</strong><br>
+                        スプレッドシート名: ${data.spreadsheetName || '不明'}<br>
+                        スプレッドシートID: ${data.spreadsheetId || '不明'}
+                    `;
+                    showToast('接続テスト成功！', 'success');
+                } else {
+                    throw new Error(data.error || '接続に失敗しました');
+                }
+            } catch (error) {
+                resultDiv.className = 'error-box';
+                resultDiv.innerHTML = `❌ <strong>接続失敗</strong><br>${error.message}`;
+                showToast('接続テストに失敗しました', 'error');
+            }
+        }
+
+        // データ移行
+        async function migrateData() {
+            const url = localStorage.getItem('omamori_api_url');
+            const resultDiv = document.getElementById('migrate-result');
+            
+            if (!url) {
+                showToast('先にAPI URLを設定してください', 'error');
+                return;
+            }
+            
+            if (!confirm('ブラウザに保存されているデータをGoogleスプレッドシートに移行します。\n既存のスプレッドシートデータは上書きされます。\n\n続行しますか？')) {
+                return;
+            }
+            
+            resultDiv.className = 'info-box';
+            resultDiv.innerHTML = '<span class="loading"></span>データ移行中...';
+            resultDiv.classList.remove('hidden');
+            
+            try {
+                // マスタデータ
+                const masterData = JSON.parse(localStorage.getItem('omamori_master') || '{}');
+                // 在庫データ
+                const stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
+                // 発注データ
+                const orderData = JSON.parse(localStorage.getItem('omamori_orders') || '{}');
+                // 履歴データ
+                const historyData = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
+                
+                const migratePayload = {
+                    action: 'migrate',
+                    master: masterData,
+                    stock: stockData,
+                    orders: orderData,
+                    history: historyData
+                };
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'text/plain'
+                    },
+                    body: JSON.stringify(migratePayload)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'success-box';
+                    resultDiv.innerHTML = `
+                        ✅ <strong>データ移行完了！</strong><br>
+                        マスタ: ${Object.keys(masterData).length}件<br>
+                        在庫: ${Object.keys(stockData).length}件<br>
+                        発注: ${Object.keys(orderData).length}件<br>
+                        履歴: ${historyData.length}件
+                    `;
+                    showToast('データ移行が完了しました！', 'success');
+                } else {
+                    throw new Error(data.error || '移行に失敗しました');
+                }
+            } catch (error) {
+                resultDiv.className = 'error-box';
+                resultDiv.innerHTML = `❌ <strong>移行失敗</strong><br>${error.message}`;
+                showToast('データ移行に失敗しました', 'error');
+            }
+        }
+
+        // トースト表示
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type} show`;
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
