@@ -29,6 +29,105 @@
             margin: 0 auto;
             padding: 20px;
         }
+        
+        /* パスワード画面 */
+        .password-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: calc(100vh - 80px);
+            padding: 20px;
+        }
+        .password-box {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+        .password-box .icon {
+            font-size: 4rem;
+            margin-bottom: 16px;
+        }
+        .password-box h2 {
+            color: #8B0000;
+            margin-bottom: 8px;
+        }
+        .password-box p {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 24px;
+        }
+        .password-input {
+            width: 100%;
+            padding: 14px;
+            font-size: 1.1rem;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            text-align: center;
+            letter-spacing: 4px;
+            margin-bottom: 16px;
+        }
+        .password-input:focus {
+            outline: none;
+            border-color: #8B0000;
+        }
+        .password-input.error {
+            border-color: #f44336;
+            animation: shake 0.3s;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
+        .password-btn {
+            width: 100%;
+            padding: 14px;
+            font-size: 1.1rem;
+            background: #8B0000;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .password-btn:hover {
+            background: #6B0000;
+        }
+        .error-message {
+            color: #f44336;
+            font-size: 0.9rem;
+            margin-top: 12px;
+            display: none;
+        }
+        .error-message.show {
+            display: block;
+        }
+        .back-link-password {
+            margin-top: 20px;
+            color: #8B0000;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+        .back-link-password:hover {
+            text-decoration: underline;
+        }
+        
+        /* メインコンテンツ（認証後） */
+        .main-content {
+            display: none;
+        }
+        .main-content.show {
+            display: block;
+        }
+        .password-screen.hidden {
+            display: none;
+        }
+        
         .menu-card {
             background: white;
             border-radius: 12px;
@@ -106,6 +205,64 @@
             border-left: 3px solid #8B0000;
             padding-left: 8px;
         }
+        
+        /* パスワード設定セクション */
+        .settings-section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .settings-section h3 {
+            color: #8B0000;
+            margin-bottom: 12px;
+            font-size: 1rem;
+        }
+        .settings-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .settings-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        .settings-btn {
+            padding: 10px 16px;
+            background: #8B0000;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .settings-btn:hover {
+            background: #6B0000;
+        }
+        .settings-note {
+            font-size: 0.8rem;
+            color: #999;
+            margin-top: 8px;
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 24px;
+            z-index: 1000;
+            display: none;
+        }
+        .toast.success { background: #4CAF50; }
+        .toast.error { background: #f44336; }
+        .toast.show { display: block; }
     </style>
 </head>
 <body>
@@ -113,49 +270,180 @@
         <h1>⚙️ 管理メニュー</h1>
     </div>
 
-    <div class="container">
-        <div class="info-box">
-            <h3>📌 管理者向けページ</h3>
-            <p>商品マスタの編集、在庫管理、QRコードの発行など、管理者向けの機能です。</p>
+    <!-- パスワード入力画面 -->
+    <div id="password-screen" class="password-screen">
+        <div class="password-box">
+            <div class="icon">🔐</div>
+            <h2>管理者認証</h2>
+            <p>管理メニューにアクセスするには<br>パスワードを入力してください</p>
+            <input type="password" id="password-input" class="password-input" placeholder="パスワード" maxlength="20" autocomplete="off">
+            <button id="password-btn" class="password-btn">ログイン</button>
+            <div id="error-message" class="error-message">パスワードが正しくありません</div>
+            <a href="../index.html" class="back-link-password">← アプリに戻る</a>
         </div>
-
-        <div class="section-title">在庫管理</div>
-
-        <a href="stock-manager.html" class="menu-card highlight">
-            <div class="icon">📊</div>
-            <h2>在庫管理 <span class="badge">NEW</span></h2>
-            <p>各お守りの在庫数・安心在庫・発注状況を管理できます。安心在庫を下回るとアラートが表示されます。</p>
-        </a>
-
-        <div class="section-title">マスタ・発行</div>
-
-        <a href="master-editor.html" class="menu-card">
-            <div class="icon">📝</div>
-            <h2>商品マスタ編集</h2>
-            <p>お守りの種類・入数・単価（税込）を追加・変更・削除できます。単価は発注時の請求金額計算に使用されます。</p>
-        </a>
-
-        <a href="qr-generator.html" class="menu-card">
-            <div class="icon">🏷️</div>
-            <h2>QRコード発行</h2>
-            <p>箱に貼るQRコードを発行します。ラベル印刷に対応しており、複数枚を一括で生成できます。</p>
-        </a>
-
-        <div class="section-title">テスト・確認</div>
-
-        <a href="../sample/sample-qr.html" class="menu-card">
-            <div class="icon">🔍</div>
-            <h2>サンプルQRコード</h2>
-            <p>動作確認用のサンプルQRコードを表示します。アプリのテストに使用できます。</p>
-        </a>
-
-        <a href="../test/test.html" class="menu-card">
-            <div class="icon">🧪</div>
-            <h2>動作テスト</h2>
-            <p>アプリの内部ロジック（QRパース、重複検知、集計）が正常に動作するかテストします。</p>
-        </a>
-
-        <a href="../index.html" class="back-link">← アプリに戻る</a>
     </div>
+
+    <!-- メインコンテンツ（認証後に表示） -->
+    <div id="main-content" class="main-content">
+        <div class="container">
+            <div class="info-box">
+                <h3>📌 管理者向けページ</h3>
+                <p>商品マスタの編集、在庫管理、QRコードの発行など、管理者向けの機能です。</p>
+            </div>
+
+            <div class="section-title">在庫管理</div>
+
+            <a href="stock-manager.html" class="menu-card highlight">
+                <div class="icon">📊</div>
+                <h2>在庫管理 <span class="badge">NEW</span></h2>
+                <p>各お守りの在庫数・安心在庫・発注状況を管理できます。安心在庫を下回るとアラートが表示されます。</p>
+            </a>
+
+            <div class="section-title">マスタ・発行</div>
+
+            <a href="master-editor.html" class="menu-card">
+                <div class="icon">📝</div>
+                <h2>商品マスタ編集</h2>
+                <p>お守りの種類・入数・単価（税込）を追加・変更・削除できます。単価は発注時の請求金額計算に使用されます。</p>
+            </a>
+
+            <a href="qr-generator.html" class="menu-card">
+                <div class="icon">🏷️</div>
+                <h2>QRコード発行</h2>
+                <p>箱に貼るQRコードを発行します。ラベル印刷に対応しており、複数枚を一括で生成できます。</p>
+            </a>
+
+            <div class="section-title">テスト・確認</div>
+
+            <a href="../sample/sample-qr.html" class="menu-card">
+                <div class="icon">🔍</div>
+                <h2>サンプルQRコード</h2>
+                <p>動作確認用のサンプルQRコードを表示します。アプリのテストに使用できます。</p>
+            </a>
+
+            <a href="../test/test.html" class="menu-card">
+                <div class="icon">🧪</div>
+                <h2>動作テスト</h2>
+                <p>アプリの内部ロジック（QRパース、重複検知、集計）が正常に動作するかテストします。</p>
+            </a>
+
+            <!-- パスワード設定 -->
+            <div class="settings-section">
+                <h3>🔑 パスワード設定</h3>
+                <div class="settings-row">
+                    <input type="password" id="new-password" class="settings-input" placeholder="新しいパスワード">
+                    <button id="change-password-btn" class="settings-btn">変更</button>
+                </div>
+                <p class="settings-note">※ パスワードはこのブラウザに保存されます。忘れた場合はブラウザのデータをクリアしてください。</p>
+            </div>
+
+            <a href="../index.html" class="back-link">← アプリに戻る</a>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // デフォルトパスワード（初回アクセス時に使用）
+        const DEFAULT_PASSWORD = 'admin';
+        
+        // パスワードをlocalStorageから取得（なければデフォルト）
+        function getPassword() {
+            return localStorage.getItem('omamori_admin_password') || DEFAULT_PASSWORD;
+        }
+        
+        // パスワードを保存
+        function setPassword(newPassword) {
+            localStorage.setItem('omamori_admin_password', newPassword);
+        }
+        
+        // 認証状態をセッションストレージに保存（タブを閉じるまで有効）
+        function isAuthenticated() {
+            return sessionStorage.getItem('omamori_admin_auth') === 'true';
+        }
+        
+        function setAuthenticated(value) {
+            sessionStorage.setItem('omamori_admin_auth', value ? 'true' : 'false');
+        }
+        
+        // 初期化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 既に認証済みならメインコンテンツを表示
+            if (isAuthenticated()) {
+                showMainContent();
+            }
+            
+            // パスワード入力イベント
+            const passwordInput = document.getElementById('password-input');
+            const passwordBtn = document.getElementById('password-btn');
+            
+            passwordBtn.addEventListener('click', checkPassword);
+            passwordInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    checkPassword();
+                }
+            });
+            
+            // パスワード変更イベント
+            document.getElementById('change-password-btn').addEventListener('click', changePassword);
+        });
+        
+        function checkPassword() {
+            const input = document.getElementById('password-input');
+            const errorMessage = document.getElementById('error-message');
+            const enteredPassword = input.value;
+            
+            if (enteredPassword === getPassword()) {
+                // 認証成功
+                setAuthenticated(true);
+                showMainContent();
+            } else {
+                // 認証失敗
+                input.classList.add('error');
+                errorMessage.classList.add('show');
+                
+                setTimeout(() => {
+                    input.classList.remove('error');
+                }, 300);
+                
+                // 入力をクリア
+                input.value = '';
+                input.focus();
+            }
+        }
+        
+        function showMainContent() {
+            document.getElementById('password-screen').classList.add('hidden');
+            document.getElementById('main-content').classList.add('show');
+        }
+        
+        function changePassword() {
+            const newPasswordInput = document.getElementById('new-password');
+            const newPassword = newPasswordInput.value.trim();
+            
+            if (!newPassword) {
+                showToast('パスワードを入力してください', 'error');
+                return;
+            }
+            
+            if (newPassword.length < 4) {
+                showToast('パスワードは4文字以上にしてください', 'error');
+                return;
+            }
+            
+            setPassword(newPassword);
+            newPasswordInput.value = '';
+            showToast('パスワードを変更しました', 'success');
+        }
+        
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type + ' show';
+            setTimeout(() => {
+                toast.className = 'toast';
+            }, 2000);
+        }
+    </script>
 </body>
 </html>

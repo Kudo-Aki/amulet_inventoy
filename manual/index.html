@@ -16,7 +16,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: #f5f5f5;
             color: #333;
-            line-height: 1.6;
+            line-height: 1.8;
         }
         
         .header {
@@ -50,7 +50,7 @@
         }
         
         .container {
-            max-width: 600px;
+            max-width: 700px;
             margin: 0 auto;
             padding: 16px;
         }
@@ -87,6 +87,7 @@
             background: #f9f9f9;
             border-radius: 8px;
             border-left: 4px solid #8B0000;
+            transition: background 0.2s;
         }
         
         .toc a:hover {
@@ -96,7 +97,7 @@
         .section {
             background: white;
             border-radius: 12px;
-            padding: 20px;
+            padding: 24px;
             margin-bottom: 20px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
@@ -107,395 +108,794 @@
             margin-bottom: 16px;
             padding-bottom: 8px;
             border-bottom: 2px solid #8B0000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         
         .section h3 {
             font-size: 1rem;
             color: #333;
-            margin: 16px 0 8px;
+            margin: 20px 0 12px 0;
+            padding-left: 12px;
+            border-left: 4px solid #8B0000;
         }
         
         .section p {
             margin-bottom: 12px;
+        }
+        
+        .section ul, .section ol {
+            margin-left: 24px;
+            margin-bottom: 16px;
+        }
+        
+        .section li {
+            margin-bottom: 8px;
+        }
+        
+        .screenshot {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .screenshot img {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+        }
+        
+        .screenshot .caption {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 8px;
+        }
+        
+        .tip-box {
+            background: #e3f2fd;
+            border: 1px solid #2196F3;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        
+        .tip-box h4 {
+            color: #1565C0;
+            margin-bottom: 8px;
             font-size: 0.95rem;
         }
         
-        .step {
-            display: flex;
-            align-items: flex-start;
-            margin-bottom: 16px;
-            padding: 12px;
-            background: #f9f9f9;
-            border-radius: 8px;
+        .tip-box p {
+            color: #1565C0;
+            font-size: 0.9rem;
+            margin-bottom: 0;
         }
         
-        .step-number {
+        .warning-box {
+            background: #fff3e0;
+            border: 1px solid #ff9800;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        
+        .warning-box h4 {
+            color: #e65100;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+        
+        .warning-box p {
+            color: #e65100;
+            font-size: 0.9rem;
+            margin-bottom: 0;
+        }
+        
+        .important-box {
+            background: #ffebee;
+            border: 1px solid #f44336;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        
+        .important-box h4 {
+            color: #c62828;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+        
+        .important-box p {
+            color: #c62828;
+            font-size: 0.9rem;
+            margin-bottom: 0;
+        }
+        
+        .step-box {
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 12px 0;
+        }
+        
+        .step-box .step-number {
+            display: inline-block;
             background: #8B0000;
             color: white;
             width: 28px;
             height: 28px;
             border-radius: 50%;
+            text-align: center;
+            line-height: 28px;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        
+        .step-box .step-title {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .step-box .step-desc {
+            margin-top: 8px;
+            padding-left: 36px;
+            color: #666;
+            font-size: 0.95rem;
+        }
+        
+        .mode-card {
             display: flex;
             align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 0.9rem;
-            flex-shrink: 0;
-            margin-right: 12px;
-        }
-        
-        .step-content {
-            flex: 1;
-        }
-        
-        .step-content strong {
-            display: block;
-            margin-bottom: 4px;
-            color: #8B0000;
-        }
-        
-        .screenshot {
-            width: 100%;
-            max-width: 280px;
-            margin: 16px auto;
-            display: block;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            border: 1px solid #ddd;
-        }
-        
-        .screenshot-caption {
-            text-align: center;
-            font-size: 0.85rem;
-            color: #666;
-            margin-top: 8px;
-            margin-bottom: 16px;
-        }
-        
-        .tip {
-            background: #FFF8E1;
-            border-left: 4px solid #FFC107;
-            padding: 12px;
-            margin: 16px 0;
-            border-radius: 0 8px 8px 0;
-        }
-        
-        .tip strong {
-            color: #F57C00;
-        }
-        
-        .warning {
-            background: #FFEBEE;
-            border-left: 4px solid #F44336;
-            padding: 12px;
-            margin: 16px 0;
-            border-radius: 0 8px 8px 0;
-        }
-        
-        .warning strong {
-            color: #D32F2F;
-        }
-        
-        .button-example {
-            display: inline-block;
-            padding: 8px 16px;
-            background: #8B0000;
-            color: white;
+            gap: 16px;
+            padding: 16px;
             border-radius: 8px;
+            margin: 12px 0;
+        }
+        
+        .mode-card.delivery {
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+            border: 1px solid #4CAF50;
+        }
+        
+        .mode-card.shipment {
+            background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+            border: 1px solid #FF9800;
+        }
+        
+        .mode-card.inventory {
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            border: 1px solid #2196F3;
+        }
+        
+        .mode-card .mode-icon {
+            font-size: 2.5rem;
+        }
+        
+        .mode-card .mode-info h4 {
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+        }
+        
+        .mode-card .mode-info p {
             font-size: 0.9rem;
-            margin: 4px;
+            color: #666;
+            margin-bottom: 0;
         }
         
-        .button-example.secondary {
-            background: #666;
+        .feature-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
         }
         
-        .button-example.green {
-            background: #4CAF50;
+        .feature-table th, .feature-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
         }
         
-        footer {
-            text-align: center;
+        .feature-table th {
+            background: #f5f5f5;
+            font-weight: 600;
+            color: #666;
+        }
+        
+        .feature-table tr:hover {
+            background: #fafafa;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+        
+        .badge.green {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .badge.orange {
+            background: #fff3e0;
+            color: #e65100;
+        }
+        
+        .badge.blue {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        
+        .badge.red {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .flow-diagram {
+            background: #f9f9f9;
+            border-radius: 8px;
             padding: 20px;
-            color: #999;
-            font-size: 0.85rem;
+            margin: 16px 0;
+            text-align: center;
+        }
+        
+        .flow-item {
+            display: inline-block;
+            padding: 12px 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin: 8px;
+        }
+        
+        .flow-arrow {
+            display: inline-block;
+            font-size: 1.5rem;
+            color: #8B0000;
+            margin: 0 8px;
+        }
+        
+        .footer-nav {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        
+        .footer-nav a {
+            color: #8B0000;
+            text-decoration: none;
+        }
+        
+        .footer-nav a:hover {
+            text-decoration: underline;
+        }
+        
+        @media (max-width: 480px) {
+            .flow-diagram {
+                padding: 12px;
+            }
+            .flow-item {
+                display: block;
+                margin: 8px auto;
+            }
+            .flow-arrow {
+                display: block;
+                margin: 8px auto;
+            }
         }
     </style>
 </head>
 <body>
-    <header class="header">
-        <a href="../" class="back-link">←</a>
+    <div class="header">
+        <a href="../index.html" class="back-link">←</a>
         <h1>📖 使い方マニュアル</h1>
-        <p>お守り在庫管理アプリ</p>
-    </header>
-    
+        <p>お守り在庫管理アプリの完全ガイド</p>
+    </div>
+
     <div class="container">
         <!-- 目次 -->
-        <nav class="toc">
-            <h2>📋 目次</h2>
+        <div class="toc">
+            <h2>📑 目次</h2>
             <ul>
                 <li><a href="#overview">1. アプリの概要</a></li>
-                <li><a href="#inventory">2. 棚卸の手順</a></li>
-                <li><a href="#delivery">3. 納品登録の手順</a></li>
-                <li><a href="#export">4. CSV出力・共有</a></li>
-                <li><a href="#master">5. 商品マスタの編集</a></li>
-                <li><a href="#qr">6. QRコードの発行</a></li>
-                <li><a href="#faq">7. よくある質問</a></li>
+                <li><a href="#modes">2. 3つのモードについて</a></li>
+                <li><a href="#delivery">3. 納品モードの使い方</a></li>
+                <li><a href="#shipment">4. 出庫モードの使い方</a></li>
+                <li><a href="#inventory">5. 棚卸モードの使い方</a></li>
+                <li><a href="#stock-alert">6. 安心在庫アラート</a></li>
+                <li><a href="#admin">7. 管理メニュー</a></li>
+                <li><a href="#stock-manager">8. 在庫管理</a></li>
+                <li><a href="#master-editor">9. 商品マスタ編集</a></li>
+                <li><a href="#qr-generator">10. QRコード発行</a></li>
+                <li><a href="#faq">11. よくある質問</a></li>
             </ul>
-        </nav>
-        
+        </div>
+
         <!-- 1. アプリの概要 -->
-        <section class="section" id="overview">
-            <h2>1. アプリの概要</h2>
-            <p>このアプリは、お守りの在庫管理を簡単に行うためのツールです。</p>
-            <p>箱に貼られたQRコードをスマホで読み取るだけで、在庫の確認や納品の登録ができます。</p>
+        <div id="overview" class="section">
+            <h2>📱 1. アプリの概要</h2>
+            
+            <p>「お守り在庫管理」は、お守りの箱に貼ったQRコードをスマートフォンで読み取ることで、在庫管理を簡単に行えるアプリです。</p>
             
             <h3>主な機能</h3>
-            <div class="step">
-                <div class="step-number">📋</div>
-                <div class="step-content">
-                    <strong>棚卸モード</strong>
-                    現在の在庫を確認するときに使います
-                </div>
+            <table class="feature-table">
+                <tr>
+                    <th>機能</th>
+                    <th>説明</th>
+                </tr>
+                <tr>
+                    <td>📦 納品モード</td>
+                    <td>新しく届いたお守りを登録。在庫が自動で増加します。</td>
+                </tr>
+                <tr>
+                    <td>🚚 出庫モード</td>
+                    <td>出庫するお守りを登録。在庫が自動で減少します。</td>
+                </tr>
+                <tr>
+                    <td>📋 棚卸モード</td>
+                    <td>現在の在庫を確認。在庫数は変わりません。</td>
+                </tr>
+                <tr>
+                    <td>📊 在庫管理</td>
+                    <td>在庫数・安心在庫・発注状況を管理できます。</td>
+                </tr>
+                <tr>
+                    <td>🏷️ QRコード発行</td>
+                    <td>箱に貼るQRコードを発行・印刷できます。</td>
+                </tr>
+            </table>
+            
+            <div class="tip-box">
+                <h4>💡 ポイント</h4>
+                <p>QRコードを読み取るだけで在庫が自動更新されるので、手入力の手間がなく、ミスも防げます。</p>
             </div>
-            <div class="step">
-                <div class="step-number">📦</div>
-                <div class="step-content">
-                    <strong>納品モード</strong>
-                    新しく届いたお守りを登録するときに使います
-                </div>
-            </div>
+        </div>
+
+        <!-- 2. 3つのモードについて -->
+        <div id="modes" class="section">
+            <h2>🎯 2. 3つのモードについて</h2>
             
-            <img src="images/01_mode_select.png" alt="モード選択画面" class="screenshot">
-            <p class="screenshot-caption">▲ アプリを開くとこの画面が表示されます</p>
-        </section>
-        
-        <!-- 2. 棚卸の手順 -->
-        <section class="section" id="inventory">
-            <h2>2. 棚卸の手順</h2>
+            <p>アプリには3つのモードがあり、作業内容に応じて使い分けます。</p>
             
-            <div class="step">
-                <div class="step-number">1</div>
-                <div class="step-content">
-                    <strong>「棚卸モード」をタップ</strong>
-                    青いボタンをタップします
-                </div>
-            </div>
-            
-            <div class="step">
-                <div class="step-number">2</div>
-                <div class="step-content">
-                    <strong>確認画面で「開始する」をタップ</strong>
-                    内容を確認して開始します
-                </div>
-            </div>
-            
-            <img src="images/03_inventory_confirm.png" alt="棚卸確認画面" class="screenshot">
-            <p class="screenshot-caption">▲ 確認画面が表示されます</p>
-            
-            <div class="step">
-                <div class="step-number">3</div>
-                <div class="step-content">
-                    <strong>QRコードを読み取る</strong>
-                    カメラが起動するので、箱のQRコードをかざします
+            <div class="mode-card delivery">
+                <div class="mode-icon">📦</div>
+                <div class="mode-info">
+                    <h4>納品モード</h4>
+                    <p>新しく届いたお守りを登録します。<br><span class="badge green">在庫が増えます</span></p>
                 </div>
             </div>
             
-            <div class="step">
-                <div class="step-number">4</div>
-                <div class="step-content">
-                    <strong>確認画面で「登録する」をタップ</strong>
-                    読み取った内容を確認して登録します
+            <div class="mode-card shipment">
+                <div class="mode-icon">🚚</div>
+                <div class="mode-info">
+                    <h4>出庫モード</h4>
+                    <p>出庫するお守りを登録します。<br><span class="badge orange">在庫が減ります</span></p>
                 </div>
             </div>
             
-            <div class="tip">
-                <strong>💡 ヒント</strong><br>
-                同じQRコードを2回読み取ると「重複検知」の警告が出ます。数量が二重にカウントされることはありません。
-            </div>
-            
-            <div class="step">
-                <div class="step-number">5</div>
-                <div class="step-content">
-                    <strong>すべて読み取ったら「読み取り終了」をタップ</strong>
-                    集計結果が表示されます
+            <div class="mode-card inventory">
+                <div class="mode-icon">📋</div>
+                <div class="mode-info">
+                    <h4>棚卸モード</h4>
+                    <p>現在の在庫を確認します。<br><span class="badge blue">在庫は変わりません</span></p>
                 </div>
             </div>
             
-            <div class="step">
-                <div class="step-number">6</div>
-                <div class="step-content">
-                    <strong>「CSV出力」で結果を保存・共有</strong>
-                    ダウンロードまたはLINE等で共有できます
-                </div>
+            <div class="warning-box">
+                <h4>⚠️ 注意</h4>
+                <p>モードを間違えると在庫数がずれてしまいます。作業を始める前に、正しいモードを選んでいるか確認してください。</p>
             </div>
-        </section>
-        
-        <!-- 3. 納品登録の手順 -->
-        <section class="section" id="delivery">
-            <h2>3. 納品登録の手順</h2>
-            <p>基本的な流れは棚卸と同じです。</p>
+        </div>
+
+        <!-- 3. 納品モードの使い方 -->
+        <div id="delivery" class="section">
+            <h2>📦 3. 納品モードの使い方</h2>
             
-            <div class="step">
-                <div class="step-number">1</div>
-                <div class="step-content">
-                    <strong>「納品モード」をタップ</strong>
-                    赤いボタンをタップします
-                </div>
+            <p>新しくお守りが届いたときに使用します。QRコードを読み取ると、在庫が自動で増加します。</p>
+            
+            <h3>操作手順</h3>
+            
+            <div class="step-box">
+                <span class="step-number">1</span>
+                <span class="step-title">「納品モード」をタップ</span>
+                <div class="step-desc">ホーム画面で緑色の「納品モード」ボタンをタップします。</div>
             </div>
             
-            <img src="images/02_confirm_dialog.png" alt="納品確認画面" class="screenshot">
-            <p class="screenshot-caption">▲ 納品モードの確認画面</p>
-            
-            <div class="step">
-                <div class="step-number">2</div>
-                <div class="step-content">
-                    <strong>届いた箱のQRコードを読み取る</strong>
-                    1箱ずつ読み取っていきます
-                </div>
+            <div class="step-box">
+                <span class="step-number">2</span>
+                <span class="step-title">確認画面で「開始する」をタップ</span>
+                <div class="step-desc">モードの説明が表示されるので、確認して「開始する」をタップします。</div>
             </div>
             
-            <div class="step">
-                <div class="step-number">3</div>
-                <div class="step-content">
-                    <strong>「読み取り終了」→「CSV出力」</strong>
-                    結果を保存・共有します
-                </div>
-            </div>
-        </section>
-        
-        <!-- 4. CSV出力・共有 -->
-        <section class="section" id="export">
-            <h2>4. CSV出力・共有</h2>
-            <p>読み取り結果は2つの方法で出力できます。</p>
-            
-            <h3>📥 ダウンロード</h3>
-            <p>CSVファイルをスマホに保存します。後からExcelなどで開けます。</p>
-            
-            <h3>📤 共有する</h3>
-            <p>LINE、メール、AirDropなどで送信できます。CSVファイルと集計結果のテキストが一緒に送られます。</p>
-            
-            <div class="tip">
-                <strong>💡 おすすめ</strong><br>
-                「共有する」を使うと、LINEで簡単に結果を送れます。CSVファイルも添付されるので便利です。
-            </div>
-        </section>
-        
-        <!-- 5. 商品マスタの編集 -->
-        <section class="section" id="master">
-            <h2>5. 商品マスタの編集</h2>
-            <p>新しいお守りを追加したり、入数を変更できます。</p>
-            
-            <div class="step">
-                <div class="step-number">1</div>
-                <div class="step-content">
-                    <strong>右上の ⚙️ をタップ</strong>
-                    管理メニューが開きます
-                </div>
+            <div class="step-box">
+                <span class="step-number">3</span>
+                <span class="step-title">QRコードを読み取る</span>
+                <div class="step-desc">カメラが起動するので、箱のQRコードを読み取ります。読み取ると確認画面が表示されます。</div>
             </div>
             
-            <img src="images/04_admin_menu.png" alt="管理メニュー" class="screenshot">
-            <p class="screenshot-caption">▲ 管理メニュー</p>
-            
-            <div class="step">
-                <div class="step-number">2</div>
-                <div class="step-content">
-                    <strong>「商品マスタ編集」をタップ</strong>
-                    マスタ編集画面が開きます
-                </div>
+            <div class="step-box">
+                <span class="step-number">4</span>
+                <span class="step-title">「登録する」をタップ</span>
+                <div class="step-desc">商品名と入数を確認し、「登録する」をタップします。在庫が自動で増加します。</div>
             </div>
             
-            <img src="images/05_master_editor.png" alt="マスタ編集画面" class="screenshot">
-            <p class="screenshot-caption">▲ マスタ編集画面</p>
-            
-            <div class="step">
-                <div class="step-number">3</div>
-                <div class="step-content">
-                    <strong>商品を追加・編集・削除</strong>
-                    必要な操作を行います
-                </div>
+            <div class="step-box">
+                <span class="step-number">5</span>
+                <span class="step-title">続けて読み取り or 終了</span>
+                <div class="step-desc">続けて他の箱も読み取れます。終了する場合は「読み取り終了」をタップします。</div>
             </div>
             
-            <div class="step">
-                <div class="step-number">4</div>
-                <div class="step-content">
-                    <strong>「ブラウザに保存」をタップ</strong>
-                    変更が保存されます
-                </div>
+            <div class="step-box">
+                <span class="step-number">6</span>
+                <span class="step-title">集計結果を確認</span>
+                <div class="step-desc">読み取った内容の集計が表示されます。CSV出力やホーム画面への移動ができます。</div>
             </div>
             
-            <div class="warning">
-                <strong>⚠️ 注意</strong><br>
-                ブラウザのキャッシュをクリアすると、保存したマスタが消えます。「エクスポート」でバックアップを取っておきましょう。
+            <div class="tip-box">
+                <h4>💡 集計画面でできること</h4>
+                <p>・CSV出力：読み取りデータをファイルに保存<br>
+                ・追加でQRを読み取る：同じセッションで続けて読み取り<br>
+                ・ホーム画面へ戻る：作業を終了</p>
             </div>
-        </section>
-        
-        <!-- 6. QRコードの発行 -->
-        <section class="section" id="qr">
-            <h2>6. QRコードの発行</h2>
-            <p>新しい箱用のQRコードを発行できます。</p>
+        </div>
+
+        <!-- 4. 出庫モードの使い方 -->
+        <div id="shipment" class="section">
+            <h2>🚚 4. 出庫モードの使い方</h2>
             
-            <div class="step">
-                <div class="step-number">1</div>
-                <div class="step-content">
-                    <strong>管理メニュー → 「QRコード発行」</strong>
-                    発行画面が開きます
-                </div>
-            </div>
+            <p>お守りを出庫するときに使用します。QRコードを読み取ると、在庫が自動で減少します。</p>
             
-            <img src="images/06_qr_generator.png" alt="QR発行画面" class="screenshot">
-            <p class="screenshot-caption">▲ QRコード発行画面</p>
+            <h3>操作手順</h3>
+            <p>基本的な操作は納品モードと同じです。</p>
             
-            <div class="step">
-                <div class="step-number">2</div>
-                <div class="step-content">
-                    <strong>商品・年度・枚数を設定</strong>
-                    必要な情報を入力します
-                </div>
+            <div class="step-box">
+                <span class="step-number">1</span>
+                <span class="step-title">「出庫モード」をタップ</span>
+                <div class="step-desc">ホーム画面でオレンジ色の「出庫モード」ボタンをタップします。</div>
             </div>
             
-            <div class="step">
-                <div class="step-number">3</div>
-                <div class="step-content">
-                    <strong>「QRコードを生成」をタップ</strong>
-                    プレビューが表示されます
-                </div>
+            <div class="step-box">
+                <span class="step-number">2</span>
+                <span class="step-title">QRコードを読み取って登録</span>
+                <div class="step-desc">出庫する箱のQRコードを読み取り、「登録する」をタップします。</div>
             </div>
             
-            <div class="step">
-                <div class="step-number">4</div>
-                <div class="step-content">
-                    <strong>「印刷」をタップ</strong>
-                    ラベルシートに印刷します
-                </div>
+            <div class="important-box">
+                <h4>🚨 安心在庫アラート</h4>
+                <p>出庫によって在庫が「安心在庫」を下回ると、警告画面が表示されます。<br>
+                <strong>「安心在庫数を下回りました。工藤へ報告してください。」</strong><br>
+                この警告が出たら、担当者に報告してください。</p>
+            </div>
+        </div>
+
+        <!-- 5. 棚卸モードの使い方 -->
+        <div id="inventory" class="section">
+            <h2>📋 5. 棚卸モードの使い方</h2>
+            
+            <p>現在の在庫を確認するときに使用します。在庫数は変わりません。</p>
+            
+            <h3>操作手順</h3>
+            
+            <div class="step-box">
+                <span class="step-number">1</span>
+                <span class="step-title">「棚卸モード」をタップ</span>
+                <div class="step-desc">ホーム画面で青色の「棚卸モード」ボタンをタップします。</div>
             </div>
             
-            <div class="tip">
-                <strong>💡 対応ラベルシート</strong><br>
-                エーワン 72212（86.4mm × 42.3mm、12面）に対応しています。
+            <div class="step-box">
+                <span class="step-number">2</span>
+                <span class="step-title">在庫にある箱を全て読み取る</span>
+                <div class="step-desc">倉庫にある箱のQRコードを全て読み取ります。</div>
             </div>
-        </section>
-        
-        <!-- 7. よくある質問 -->
-        <section class="section" id="faq">
-            <h2>7. よくある質問</h2>
             
-            <h3>Q. カメラが起動しません</h3>
-            <p>A. 設定アプリ → Safari → カメラ で「許可」を選択してください。</p>
+            <div class="step-box">
+                <span class="step-number">3</span>
+                <span class="step-title">集計結果を確認</span>
+                <div class="step-desc">読み取った内容の集計が表示されます。実際の在庫と照合してください。</div>
+            </div>
             
-            <h3>Q. 同じQRを2回読んでしまいました</h3>
-            <p>A. 大丈夫です。重複検知機能により、数量は1回分しかカウントされません。</p>
+            <div class="tip-box">
+                <h4>💡 棚卸のコツ</h4>
+                <p>・読み取った箱は別の場所に移動すると、二重読み取りを防げます<br>
+                ・同じ箱を2回読み取ると「重複」として警告されます</p>
+            </div>
+        </div>
+
+        <!-- 6. 安心在庫アラート -->
+        <div id="stock-alert" class="section">
+            <h2>⚠️ 6. 安心在庫アラート</h2>
             
-            <h3>Q. マスタを他のスマホと共有したい</h3>
-            <p>A. マスタ編集画面の「エクスポート」でJSONファイルを保存し、他のスマホで「インポート」してください。</p>
+            <p>在庫が「安心在庫」を下回ると、アラートが表示されます。</p>
             
-            <h3>Q. 読み取り中に間違えて戻ってしまいました</h3>
-            <p>A. 残念ながら、読み取りデータは失われます。最初からやり直してください。</p>
-        </section>
+            <h3>アラートの種類</h3>
+            
+            <table class="feature-table">
+                <tr>
+                    <th>場所</th>
+                    <th>内容</th>
+                </tr>
+                <tr>
+                    <td>ホーム画面上部</td>
+                    <td>赤いバナーで「安心在庫を下回っているお守りがあります」と表示</td>
+                </tr>
+                <tr>
+                    <td>出庫時</td>
+                    <td>安心在庫を下回った瞬間に警告ダイアログが表示</td>
+                </tr>
+                <tr>
+                    <td>在庫管理画面</td>
+                    <td>不足しているお守りの一覧を表示</td>
+                </tr>
+            </table>
+            
+            <div class="important-box">
+                <h4>🚨 出庫時の警告について</h4>
+                <p>出庫モードでQRを読み取った際、その出庫によって安心在庫を下回ると、大きな警告画面が表示されます。<br>
+                <strong>「安心在庫数を下回りました。工藤へ報告してください。」</strong><br>
+                この警告が出たら、必ず担当者に報告してください。</p>
+            </div>
+        </div>
+
+        <!-- 7. 管理メニュー -->
+        <div id="admin" class="section">
+            <h2>⚙️ 7. 管理メニュー</h2>
+            
+            <p>管理メニューでは、在庫管理、商品マスタ編集、QRコード発行などの管理者向け機能を使用できます。</p>
+            
+            <h3>アクセス方法</h3>
+            <p>ホーム画面右上の ⚙️ アイコンをタップします。</p>
+            
+            <h3>パスワード認証</h3>
+            <p>管理メニューにアクセスするにはパスワードが必要です。</p>
+            
+            <div class="tip-box">
+                <h4>💡 初期パスワード</h4>
+                <p>初期パスワードは <strong>admin</strong> です。<br>
+                セキュリティのため、初回アクセス後にパスワードを変更することをお勧めします。</p>
+            </div>
+            
+            <h3>パスワードの変更方法</h3>
+            <ol>
+                <li>管理メニューにログイン</li>
+                <li>画面下部の「パスワード設定」セクションを見つける</li>
+                <li>新しいパスワードを入力して「変更」をタップ</li>
+            </ol>
+            
+            <div class="warning-box">
+                <h4>⚠️ パスワードを忘れた場合</h4>
+                <p>パスワードを忘れた場合は、ブラウザのデータ（キャッシュ・Cookie）をクリアすると、初期パスワードに戻ります。ただし、在庫データなども消えてしまうので注意してください。</p>
+            </div>
+        </div>
+
+        <!-- 8. 在庫管理 -->
+        <div id="stock-manager" class="section">
+            <h2>📊 8. 在庫管理</h2>
+            
+            <p>各お守りの在庫数、安心在庫、発注状況を管理できます。</p>
+            
+            <h3>3つのタブ</h3>
+            
+            <table class="feature-table">
+                <tr>
+                    <th>タブ</th>
+                    <th>機能</th>
+                </tr>
+                <tr>
+                    <td>📦 在庫設定</td>
+                    <td>現在庫と安心在庫を設定・確認</td>
+                </tr>
+                <tr>
+                    <td>📝 発注状況</td>
+                    <td>発注状況・発注数・納期を記録、請求金額を自動計算</td>
+                </tr>
+                <tr>
+                    <td>📋 履歴</td>
+                    <td>入庫・出庫の履歴を確認、CSV出力</td>
+                </tr>
+            </table>
+            
+            <h3>在庫設定タブの使い方</h3>
+            
+            <div class="step-box">
+                <span class="step-number">1</span>
+                <span class="step-title">現在庫を入力</span>
+                <div class="step-desc">各お守りの「現在庫」欄に現在の在庫数を入力します。</div>
+            </div>
+            
+            <div class="step-box">
+                <span class="step-number">2</span>
+                <span class="step-title">安心在庫を設定</span>
+                <div class="step-desc">「安心在庫」欄に、在庫がこの数を下回ったらアラートを出したい数を入力します。</div>
+            </div>
+            
+            <div class="step-box">
+                <span class="step-number">3</span>
+                <span class="step-title">保存</span>
+                <div class="step-desc">「保存」ボタンをタップして設定を保存します。</div>
+            </div>
+            
+            <h3>発注状況タブの使い方</h3>
+            
+            <div class="step-box">
+                <span class="step-number">1</span>
+                <span class="step-title">発注状況を選択</span>
+                <div class="step-desc">「発注済」または「未発注」を選択します。</div>
+            </div>
+            
+            <div class="step-box">
+                <span class="step-number">2</span>
+                <span class="step-title">発注数と納期を入力</span>
+                <div class="step-desc">発注した数量と納期を入力します。</div>
+            </div>
+            
+            <div class="step-box">
+                <span class="step-number">3</span>
+                <span class="step-title">請求金額を確認</span>
+                <div class="step-desc">単価×発注数の金額が自動計算されます。合計金額も画面下部に表示されます。</div>
+            </div>
+            
+            <div class="tip-box">
+                <h4>💡 単価の設定</h4>
+                <p>請求金額を計算するには、事前に「商品マスタ編集」で各お守りの単価（税込）を設定しておく必要があります。</p>
+            </div>
+        </div>
+
+        <!-- 9. 商品マスタ編集 -->
+        <div id="master-editor" class="section">
+            <h2>📝 9. 商品マスタ編集</h2>
+            
+            <p>お守りの種類、入数、単価を追加・変更・削除できます。</p>
+            
+            <h3>設定項目</h3>
+            
+            <table class="feature-table">
+                <tr>
+                    <th>項目</th>
+                    <th>説明</th>
+                    <th>例</th>
+                </tr>
+                <tr>
+                    <td>商品コード</td>
+                    <td>英大文字のみ。QRコードに使用</td>
+                    <td>HEALTH</td>
+                </tr>
+                <tr>
+                    <td>商品名</td>
+                    <td>お守りの名前</td>
+                    <td>健康守り</td>
+                </tr>
+                <tr>
+                    <td>入数</td>
+                    <td>1箱あたりの個数</td>
+                    <td>50</td>
+                </tr>
+                <tr>
+                    <td>単価（税込）</td>
+                    <td>発注時の請求金額計算に使用</td>
+                    <td>500</td>
+                </tr>
+            </table>
+            
+            <h3>新しいお守りを追加する</h3>
+            
+            <div class="step-box">
+                <span class="step-number">1</span>
+                <span class="step-title">画面下部の入力欄に情報を入力</span>
+                <div class="step-desc">商品コード、商品名、入数、単価を入力します。</div>
+            </div>
+            
+            <div class="step-box">
+                <span class="step-number">2</span>
+                <span class="step-title">「追加」をタップ</span>
+                <div class="step-desc">一覧に追加されます。</div>
+            </div>
+            
+            <div class="step-box">
+                <span class="step-number">3</span>
+                <span class="step-title">「ブラウザに保存」をタップ</span>
+                <div class="step-desc">変更を保存します。</div>
+            </div>
+            
+            <div class="warning-box">
+                <h4>⚠️ データのバックアップ</h4>
+                <p>ブラウザのキャッシュをクリアするとマスタが消えてしまいます。<br>
+                「ファイルに保存」ボタンでバックアップを取っておくことをお勧めします。</p>
+            </div>
+        </div>
+
+        <!-- 10. QRコード発行 -->
+        <div id="qr-generator" class="section">
+            <h2>🏷️ 10. QRコード発行</h2>
+            
+            <p>箱に貼るQRコードを発行・印刷できます。</p>
+            
+            <h3>QRコードの形式</h3>
+            <p>QRコードには以下の情報が含まれます：</p>
+            <p style="text-align: center; font-family: monospace; font-size: 1.2rem; background: #f5f5f5; padding: 12px; border-radius: 8px;">
+                <strong>商品コード-年度-連番</strong><br>
+                例: HEALTH-25-0001
+            </p>
+            
+            <h3>発行手順</h3>
+            
+            <div class="step-box">
+                <span class="step-number">1</span>
+                <span class="step-title">商品を選択</span>
+                <div class="step-desc">QRコードを発行するお守りを選択します。</div>
+            </div>
+            
+            <div class="step-box">
+                <span class="step-number">2</span>
+                <span class="step-title">年度を入力</span>
+                <div class="step-desc">西暦下2桁を入力します（例: 2025年 → 25）。</div>
+            </div>
+            
+            <div class="step-box">
+                <span class="step-number">3</span>
+                <span class="step-title">開始番号と枚数を設定</span>
+                <div class="step-desc">連番の開始番号と、発行する枚数を入力します。</div>
+            </div>
+            
+            <div class="step-box">
+                <span class="step-number">4</span>
+                <span class="step-title">「QRコードを生成」をタップ</span>
+                <div class="step-desc">プレビューが表示されます。</div>
+            </div>
+            
+            <div class="step-box">
+                <span class="step-number">5</span>
+                <span class="step-title">「印刷用ページを開く」をタップ</span>
+                <div class="step-desc">新しいウィンドウで印刷用ページが開きます。</div>
+            </div>
+            
+            <div class="step-box">
+                <span class="step-number">6</span>
+                <span class="step-title">「印刷する」をタップ</span>
+                <div class="step-desc">印刷ダイアログが表示されます。</div>
+            </div>
+            
+            <div class="tip-box">
+                <h4>💡 推奨ラベル用紙</h4>
+                <p><strong>エーワン 品番: 72212</strong><br>
+                ラベルシール [プリンタ兼用] マット紙・ホワイト A4 12面 四辺余白付<br>
+                1片サイズ: 86.4×42.3mm / 面付: 12面（2列×6段）</p>
+            </div>
+        </div>
+
+        <!-- 11. よくある質問 -->
+        <div id="faq" class="section">
+            <h2>❓ 11. よくある質問</h2>
+            
+            <h3>Q. 同じ箱を2回読み取ってしまった</h3>
+            <p>A. 同じセッション内で同じQRコードを読み取ると「重複」として警告され、在庫には反映されません。安心してください。</p>
+            
+            <h3>Q. 間違ったモードで読み取ってしまった</h3>
+            <p>A. 在庫管理画面で手動で在庫数を修正できます。履歴も確認できるので、どの箱を読み取ったか確認してください。</p>
+            
+            <h3>Q. データが消えてしまった</h3>
+            <p>A. ブラウザのキャッシュをクリアするとデータが消えます。定期的に「ファイルに保存」でバックアップを取ることをお勧めします。</p>
+            
+            <h3>Q. 複数のスマホで使いたい</h3>
+            <p>A. 商品マスタは「ファイルに保存」→「ファイルから読み込み」で他のスマホに共有できます。在庫データは各スマホで別々に管理されます。</p>
+            
+            <h3>Q. 管理画面のパスワードを忘れた</h3>
+            <p>A. ブラウザのデータ（キャッシュ・Cookie）をクリアすると、初期パスワード「admin」に戻ります。ただし、在庫データなども消えてしまうので注意してください。</p>
+            
+            <h3>Q. QRコードが読み取れない</h3>
+            <p>A. 以下を確認してください：<br>
+            ・カメラの権限が許可されているか<br>
+            ・QRコードが汚れていないか<br>
+            ・明るい場所で読み取っているか<br>
+            ・QRコードがカメラの枠内に収まっているか</p>
+        </div>
+
+        <div class="footer-nav">
+            <a href="../index.html">← アプリに戻る</a>
+            <a href="#overview">↑ ページトップへ</a>
+        </div>
     </div>
-    
-    <footer>
-        お守り在庫管理アプリ マニュアル
-    </footer>
 </body>
 </html>

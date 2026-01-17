@@ -96,6 +96,7 @@ const elements = {
     summaryTotalQuantity: document.getElementById('summary-total-quantity'),
     summaryTbody: document.getElementById('summary-tbody'),
     btnExportCsv: document.getElementById('btn-export-csv'),
+    btnContinueScan: document.getElementById('btn-continue-scan'),
     btnNewSession: document.getElementById('btn-new-session'),
     
     // トースト
@@ -140,6 +141,7 @@ function initEventListeners() {
     
     // 集計画面
     elements.btnExportCsv.addEventListener('click', showExportOptions);
+    elements.btnContinueScan.addEventListener('click', continueScan);
     elements.btnNewSession.addEventListener('click', startNewSession);
 }
 
@@ -674,6 +676,17 @@ function confirmBackToMode() {
 function startNewSession() {
     checkStockAlerts();
     showScreen('mode-select-screen');
+}
+
+// 追加でQRを読み取る（同じセッションを継続）
+function continueScan() {
+    // スキャン画面に戻る
+    showScreen('scan-screen');
+    
+    // QRスキャナーを再起動
+    startQrScanner();
+    
+    showSuccessToast('スキャンを継続します');
 }
 
 // ========================================
