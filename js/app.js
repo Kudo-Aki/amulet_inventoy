@@ -9,7 +9,8 @@
  * - 商品別集計
  * - CSV出力（ダウンロード＆メール送信）
  * - 在庫連動（納品で増加、出庫で減少）
- * - 在庫不足アラート
+ * - 安心在庫アラート
+ * - 出庫時の安心在庫警告
  */
 
 // ========================================
@@ -18,16 +19,16 @@
 
 // 商品マスタ（デフォルト値）
 const DEFAULT_MASTER = {
-    'HEALTH': { name: '健康守り', quantity: 50 },
-    'MONEY': { name: '金運守り', quantity: 100 },
-    'LOVE': { name: '縁結び守り', quantity: 80 },
-    'TRAFFIC': { name: '交通安全守り', quantity: 60 },
-    'STUDY': { name: '学業成就守り', quantity: 70 },
-    'FAMILY': { name: '家内安全守り', quantity: 50 },
-    'BUSINESS': { name: '商売繁盛守り', quantity: 60 },
-    'CHILD': { name: '子授け守り', quantity: 40 },
-    'RECOVERY': { name: '病気平癒守り', quantity: 50 },
-    'LUCK': { name: '開運守り', quantity: 80 }
+    'HEALTH': { name: '健康守り', quantity: 50, unitPrice: 0 },
+    'MONEY': { name: '金運守り', quantity: 100, unitPrice: 0 },
+    'LOVE': { name: '縁結び守り', quantity: 80, unitPrice: 0 },
+    'TRAFFIC': { name: '交通安全守り', quantity: 60, unitPrice: 0 },
+    'STUDY': { name: '学業成就守り', quantity: 70, unitPrice: 0 },
+    'FAMILY': { name: '家内安全守り', quantity: 50, unitPrice: 0 },
+    'BUSINESS': { name: '商売繁盛守り', quantity: 60, unitPrice: 0 },
+    'CHILD': { name: '子授け守り', quantity: 40, unitPrice: 0 },
+    'RECOVERY': { name: '病気平癒守り', quantity: 50, unitPrice: 0 },
+    'LUCK': { name: '開運守り', quantity: 80, unitPrice: 0 }
 };
 
 // セッションデータ
@@ -115,6 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadMasterFromStorage();
     createScanConfirmDialog();
     createEmailDialog();
+    createSafeStockWarningDialog();
     checkStockAlerts();
 });
 
@@ -142,7 +144,7 @@ function initEventListeners() {
 }
 
 // ========================================
-// 在庫アラートチェック
+// 安心在庫アラートチェック
 // ========================================
 
 function checkStockAlerts() {
@@ -150,7 +152,7 @@ function checkStockAlerts() {
     
     if (lowItems.length > 0) {
         elements.stockAlertBanner.classList.add('show');
-        elements.alertText.textContent = `在庫不足: ${lowItems.length}種類のお守り`;
+        elements.alertText.textContent = `安心在庫不足: ${lowItems.length}種類のお守り`;
     } else {
         elements.stockAlertBanner.classList.remove('show');
     }
@@ -161,13 +163,16 @@ function getLowStockItems() {
     const lowItems = [];
     
     Object.keys(productMaster).forEach(code => {
-        const stock = stockData[code] || { stock: 0, alertThreshold: 10 };
-        if (stock.stock <= stock.alertThreshold) {
+        const stock = stockData[code] || { stock: 0, safeStock: 10 };
+        // 旧形式（alertThreshold）から新形式（safeStock）への対応
+        const safeStock = stock.safeStock !== undefined ? stock.safeStock : (stock.alertThreshold || 10);
+        
+        if (stock.stock < safeStock) {
             lowItems.push({
                 code: code,
                 name: productMaster[code].name,
                 stock: stock.stock,
-                threshold: stock.alertThreshold
+                safeStock: safeStock
             });
         }
     });
@@ -176,8 +181,55 @@ function getLowStockItems() {
 }
 
 // ========================================
+// 安心在庫警告ダイアログの作成
+// ========================================
+
+function createSafeStockWarningDialog() {
+    const dialog = document.createElement('div');
+    dialog.id = 'safe-stock-warning-dialog';
+    dialog.className = 'dialog-overlay hidden';
+    dialog.innerHTML = `
+        <div class="dialog" style="max-width: 380px;">
+            <div class="dialog-header" style="background: #f44336; color: white; padding: 20px; text-align: center;">
+                <span style="font-size: 3rem;">⚠️</span>
+                <div style="font-size: 1.3rem; font-weight: bold; margin-top: 12px;">安心在庫を下回りました</div>
+            </div>
+            <div class="dialog-body" style="padding: 24px; text-align: center;">
+                <div id="safe-stock-warning-product" style="font-size: 1.4rem; font-weight: bold; color: #c62828; margin-bottom: 16px;"></div>
+                <div style="background: #ffebee; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+                    <div style="font-size: 0.9rem; color: #666; margin-bottom: 8px;">現在庫 / 安心在庫</div>
+                    <div id="safe-stock-warning-numbers" style="font-size: 1.5rem; font-weight: bold; color: #c62828;"></div>
+                </div>
+                <div style="background: #fff3e0; border: 2px solid #ff9800; border-radius: 8px; padding: 16px; font-size: 1.1rem; font-weight: bold; color: #e65100;">
+                    📞 工藤へ報告してください
+                </div>
+            </div>
+            <div class="dialog-footer" style="padding: 16px; text-align: center; border-top: 1px solid #eee;">
+                <button id="btn-safe-stock-warning-ok" class="btn-primary" style="padding: 14px 40px; font-size: 1.1rem;">
+                    確認しました
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(dialog);
+    
+    document.getElementById('btn-safe-stock-warning-ok').addEventListener('click', () => {
+        dialog.classList.add('hidden');
+    });
+}
+
+function showSafeStockWarning(productName, currentStock, safeStock) {
+    const dialog = document.getElementById('safe-stock-warning-dialog');
+    document.getElementById('safe-stock-warning-product').textContent = productName;
+    document.getElementById('safe-stock-warning-numbers').textContent = `${currentStock}個 / ${safeStock}個`;
+    dialog.classList.remove('hidden');
+}
+
+// ========================================
 // 読み取り確認ダイアログの作成
 // ========================================
+
+let pendingScanData = null;
 
 function createScanConfirmDialog() {
     const dialog = document.createElement('div');
@@ -199,53 +251,40 @@ function createScanConfirmDialog() {
                 </div>
             </div>
             <div class="dialog-footer" style="display: flex; gap: 12px; padding: 16px;">
-                <button id="btn-scan-cancel" class="btn btn-secondary" style="flex: 1; padding: 14px; font-size: 1rem;">キャンセル</button>
-                <button id="btn-scan-register" class="btn btn-primary" style="flex: 1; padding: 14px; font-size: 1rem; background: #4CAF50;">登録する</button>
+                <button id="btn-scan-cancel" class="btn-secondary" style="flex: 1; padding: 12px;">キャンセル</button>
+                <button id="btn-scan-confirm" class="btn-primary" style="flex: 1; padding: 12px;">登録する</button>
             </div>
         </div>
     `;
     document.body.appendChild(dialog);
     
-    // イベントリスナー
     document.getElementById('btn-scan-cancel').addEventListener('click', cancelScanConfirm);
-    document.getElementById('btn-scan-register').addEventListener('click', confirmScanRegister);
+    document.getElementById('btn-scan-confirm').addEventListener('click', confirmScanRegister);
 }
-
-// 確認ダイアログ用の一時データ
-let pendingScanData = null;
 
 function showScanConfirmDialog(scanData) {
     pendingScanData = scanData;
-    scanPaused = true;
     
-    const product = productMaster[scanData.productCode];
-    const quantity = product ? product.quantity : '不明';
-    
-    // モードに応じてダイアログの色とアイコンを変更
     const header = document.getElementById('scan-confirm-header');
     const icon = document.getElementById('scan-confirm-icon');
-    const registerBtn = document.getElementById('btn-scan-register');
     
     if (session.mode === 'delivery') {
-        header.style.background = 'linear-gradient(135deg, #4CAF50 0%, #388E3C 100%)';
+        header.style.background = '#4CAF50';
         icon.textContent = '📦';
-        registerBtn.style.background = '#4CAF50';
-        registerBtn.textContent = '登録する（在庫+）';
     } else if (session.mode === 'shipment') {
-        header.style.background = 'linear-gradient(135deg, #FF5722 0%, #E64A19 100%)';
+        header.style.background = '#FF9800';
         icon.textContent = '🚚';
-        registerBtn.style.background = '#FF5722';
-        registerBtn.textContent = '登録する（在庫-）';
     } else {
-        header.style.background = 'linear-gradient(135deg, #2196F3 0%, #1976D2 100%)';
+        header.style.background = '#2196F3';
         icon.textContent = '📋';
-        registerBtn.style.background = '#2196F3';
-        registerBtn.textContent = '登録する';
     }
     
     document.getElementById('scan-confirm-product').textContent = scanData.productName;
     document.getElementById('scan-confirm-qr').textContent = scanData.qrCode;
-    document.getElementById('scan-confirm-quantity').textContent = `入数: ${quantity}個/箱`;
+    
+    const product = productMaster[scanData.productCode];
+    const quantity = product ? product.quantity : 0;
+    document.getElementById('scan-confirm-quantity').textContent = `入数: ${quantity}個`;
     
     // 在庫表示（納品・出庫モードのみ）
     const stockDisplay = document.getElementById('scan-confirm-stock');
@@ -254,21 +293,18 @@ function showScanConfirmDialog(scanData) {
         const stockValue = document.getElementById('scan-confirm-stock-value');
         stockValue.textContent = `${currentStock}個`;
         
-        const stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
-        const threshold = stockData[scanData.productCode] ? stockData[scanData.productCode].alertThreshold : 10;
-        stockValue.className = currentStock <= threshold ? 'stock-value low' : 'stock-value normal';
-        
+        const safeStock = getSafeStock(scanData.productCode);
+        if (currentStock < safeStock) {
+            stockValue.className = 'stock-value low';
+        } else {
+            stockValue.className = 'stock-value normal';
+        }
         stockDisplay.style.display = 'flex';
     } else {
         stockDisplay.style.display = 'none';
     }
     
     document.getElementById('scan-confirm-dialog').classList.remove('hidden');
-    
-    // 振動フィードバック
-    if (navigator.vibrate) {
-        navigator.vibrate(50);
-    }
 }
 
 function cancelScanConfirm() {
@@ -288,13 +324,23 @@ function confirmScanRegister() {
         
         if (session.mode === 'delivery') {
             updateStock(pendingScanData.productCode, quantity, 'add', `QR: ${pendingScanData.qrCode}`);
+            showSuccessToast(`${pendingScanData.productName} を登録しました`);
         } else if (session.mode === 'shipment') {
-            updateStock(pendingScanData.productCode, quantity, 'remove', `QR: ${pendingScanData.qrCode}`);
+            const result = updateStockWithCheck(pendingScanData.productCode, quantity, `QR: ${pendingScanData.qrCode}`);
+            showSuccessToast(`${pendingScanData.productName} を登録しました`);
+            
+            // 安心在庫を下回った場合は警告を表示
+            if (result.belowSafeStock && result.justBecameLow) {
+                setTimeout(() => {
+                    showSafeStockWarning(result.productName, result.currentStock, result.safeStock);
+                }, 500);
+            }
+        } else {
+            showSuccessToast(`${pendingScanData.productName} を登録しました`);
         }
         
         // UI更新
         updateScanUI(pendingScanData);
-        showSuccessToast(`${pendingScanData.productName} を登録しました`);
     }
     
     document.getElementById('scan-confirm-dialog').classList.add('hidden');
@@ -311,11 +357,22 @@ function getStock(productCode) {
     return stockData[productCode] ? stockData[productCode].stock : 0;
 }
 
+function getSafeStock(productCode) {
+    const stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
+    if (stockData[productCode]) {
+        // 旧形式（alertThreshold）から新形式（safeStock）への対応
+        return stockData[productCode].safeStock !== undefined ? 
+               stockData[productCode].safeStock : 
+               (stockData[productCode].alertThreshold || 10);
+    }
+    return 10;
+}
+
 function updateStock(productCode, quantity, operation, note) {
     const stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
     
     if (!stockData[productCode]) {
-        stockData[productCode] = { stock: 0, alertThreshold: 10 };
+        stockData[productCode] = { stock: 0, safeStock: 10 };
     }
     
     if (operation === 'add') {
@@ -328,6 +385,58 @@ function updateStock(productCode, quantity, operation, note) {
     
     // 履歴に追加
     addStockHistory(operation === 'add' ? 'in' : 'out', productCode, quantity, note);
+}
+
+// 出庫時の在庫更新（安心在庫チェック付き）
+function updateStockWithCheck(productCode, quantity, note) {
+    const stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
+    
+    if (!stockData[productCode]) {
+        stockData[productCode] = { stock: 0, safeStock: 10 };
+    }
+    
+    const beforeStock = stockData[productCode].stock;
+    const safeStock = stockData[productCode].safeStock !== undefined ? 
+                      stockData[productCode].safeStock : 
+                      (stockData[productCode].alertThreshold || 10);
+    
+    stockData[productCode].stock = Math.max(0, stockData[productCode].stock - quantity);
+    const afterStock = stockData[productCode].stock;
+    
+    localStorage.setItem('omamori_stock', JSON.stringify(stockData));
+    
+    // 履歴に追加
+    addStockHistory('out', productCode, quantity, note);
+    
+    // 安心在庫を下回ったかチェック
+    const productName = productMaster[productCode] ? productMaster[productCode].name : productCode;
+    
+    if (afterStock < safeStock && beforeStock >= safeStock) {
+        // 今回の出庫で安心在庫を下回った
+        return {
+            belowSafeStock: true,
+            justBecameLow: true,
+            productName: productName,
+            currentStock: afterStock,
+            safeStock: safeStock
+        };
+    } else if (afterStock < safeStock) {
+        // 既に安心在庫を下回っていた
+        return {
+            belowSafeStock: true,
+            justBecameLow: false,
+            productName: productName,
+            currentStock: afterStock,
+            safeStock: safeStock
+        };
+    }
+    
+    return {
+        belowSafeStock: false,
+        productName: productName,
+        currentStock: afterStock,
+        safeStock: safeStock
+    };
 }
 
 function addStockHistory(type, productCode, quantity, note) {
@@ -362,68 +471,125 @@ function createEmailDialog() {
     dialog.innerHTML = `
         <div class="dialog" style="max-width: 400px;">
             <div class="dialog-header" style="background: #8B0000; color: white; padding: 16px; text-align: center;">
-                <span style="font-size: 1.5rem;">📤</span>
-                <div style="font-size: 1.1rem; font-weight: bold; margin-top: 4px;">CSV出力・共有</div>
+                <div style="font-size: 1.2rem; font-weight: bold;">📤 CSV出力方法を選択</div>
             </div>
             <div class="dialog-body" style="padding: 20px;">
-                <div style="margin-bottom: 16px;">
-                    <button id="btn-download-csv" class="btn btn-primary" style="width: 100%; padding: 14px; font-size: 1rem;">
-                        📥 ダウンロード
-                    </button>
-                    <p style="font-size: 0.85rem; color: #666; text-align: center; margin-top: 8px;">CSVファイルを端末に保存します</p>
-                </div>
-                <hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;">
-                <div id="share-section">
-                    <button id="btn-share-csv" class="btn btn-secondary" style="width: 100%; padding: 14px; font-size: 1rem; background: #4CAF50; color: white; border: none;">
-                        📤 共有する（LINE・メール・AirDropなど）
-                    </button>
-                    <p style="font-size: 0.85rem; color: #666; text-align: center; margin-top: 8px;">CSVファイルと集計結果を共有できます</p>
-                </div>
-                <div id="share-not-supported" style="display: none; text-align: center; color: #999; padding: 12px;">
-                    <p style="font-size: 0.85rem;">※ このブラウザでは共有機能を利用できません</p>
-                </div>
+                <button id="btn-download-csv" class="btn-primary" style="width: 100%; padding: 16px; margin-bottom: 12px; font-size: 1rem;">
+                    📥 ファイルをダウンロード
+                </button>
+                <button id="btn-share-csv" class="btn-secondary" style="width: 100%; padding: 16px; margin-bottom: 12px; font-size: 1rem;">
+                    📤 共有（LINE・メール等）
+                </button>
+                <button id="btn-email-csv" class="btn-secondary" style="width: 100%; padding: 16px; font-size: 1rem;">
+                    ✉️ メールで送信
+                </button>
             </div>
-            <div class="dialog-footer" style="padding: 16px; border-top: 1px solid #eee;">
-                <button id="btn-close-email-dialog" class="btn btn-secondary" style="width: 100%; padding: 12px;">閉じる</button>
+            <div class="dialog-footer" style="padding: 16px; text-align: center; border-top: 1px solid #eee;">
+                <button id="btn-email-cancel" class="btn-secondary" style="padding: 12px 32px;">キャンセル</button>
             </div>
         </div>
     `;
     document.body.appendChild(dialog);
     
-    // イベントリスナー
-    document.getElementById('btn-download-csv').addEventListener('click', () => {
-        exportCsvDownload();
+    document.getElementById('btn-download-csv').addEventListener('click', downloadCsv);
+    document.getElementById('btn-share-csv').addEventListener('click', shareCsv);
+    document.getElementById('btn-email-csv').addEventListener('click', emailCsv);
+    document.getElementById('btn-email-cancel').addEventListener('click', () => {
         document.getElementById('email-dialog').classList.add('hidden');
     });
-    document.getElementById('btn-share-csv').addEventListener('click', shareCsvFile);
-    document.getElementById('btn-close-email-dialog').addEventListener('click', () => {
-        document.getElementById('email-dialog').classList.add('hidden');
-    });
-    
-    // Web Share API対応チェック
-    if (!navigator.share || !navigator.canShare) {
-        document.getElementById('share-section').style.display = 'none';
-        document.getElementById('share-not-supported').style.display = 'block';
-    }
 }
 
 function showExportOptions() {
     document.getElementById('email-dialog').classList.remove('hidden');
 }
 
-// ========================================
-// 画面遷移
-// ========================================
+function downloadCsv() {
+    const csv = generateCsv();
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = generateFilename();
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    document.getElementById('email-dialog').classList.add('hidden');
+    showSuccessToast('CSVをダウンロードしました');
+}
 
-function showScreen(screenId) {
-    document.querySelectorAll('.screen').forEach(screen => {
-        screen.classList.remove('active');
+async function shareCsv() {
+    const csv = generateCsv();
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const file = new File([blob], generateFilename(), { type: 'text/csv' });
+    
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+                files: [file],
+                title: 'お守り在庫管理データ',
+                text: `${getModeText()}データ`
+            });
+            document.getElementById('email-dialog').classList.add('hidden');
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                showSuccessToast('共有がキャンセルされました');
+            }
+        }
+    } else {
+        // 共有APIが使えない場合はダウンロード
+        downloadCsv();
+    }
+}
+
+function emailCsv() {
+    const csv = generateCsv();
+    const subject = encodeURIComponent(`お守り在庫管理 - ${getModeText()}データ`);
+    const body = encodeURIComponent(`${getModeText()}データを添付します。\n\n---\n${csv}`);
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    document.getElementById('email-dialog').classList.add('hidden');
+}
+
+function generateCsv() {
+    let csv = '\uFEFF'; // BOM for Excel
+    csv += `お守り在庫管理 - ${getModeText()}\n`;
+    csv += `日時,${formatDateTime(session.startTime)}\n`;
+    csv += `総箱数,${session.scannedBoxes.length}\n`;
+    csv += `総数量,${calculateTotalQuantity()}\n\n`;
+    
+    csv += '商品コード,商品名,箱数,入数,合計\n';
+    
+    const summary = calculateSummary();
+    Object.keys(summary).sort().forEach(code => {
+        const item = summary[code];
+        csv += `${code},${item.name},${item.boxCount},${item.quantity},${item.total}\n`;
     });
-    document.getElementById(screenId).classList.add('active');
+    
+    csv += '\n詳細データ\n';
+    csv += 'QRコード,商品コード,商品名,年度,箱番号,読み取り時刻\n';
+    
+    session.scannedBoxes.forEach(box => {
+        csv += `${box.qrCode},${box.productCode},${box.productName},${box.year},${box.boxNumber},${formatDateTime(new Date(box.timestamp))}\n`;
+    });
+    
+    return csv;
+}
+
+function generateFilename() {
+    const date = formatDateForFilename(session.startTime);
+    const mode = session.mode === 'delivery' ? 'nouhin' : (session.mode === 'shipment' ? 'shukko' : 'tanaoroshi');
+    return `omamori_${mode}_${date}.csv`;
+}
+
+function getModeText() {
+    if (session.mode === 'delivery') return '納品';
+    if (session.mode === 'shipment') return '出庫';
+    return '棚卸';
 }
 
 // ========================================
-// モード選択・確認ダイアログ
+// モード確認ダイアログ
 // ========================================
 
 function showConfirmDialog(mode) {
@@ -546,124 +712,75 @@ function stopQrScanner() {
 
 function onScanSuccess(decodedText, decodedResult) {
     // 確認画面表示中はスキャンを無視
-    if (scanPaused) {
-        return;
-    }
+    if (scanPaused) return;
     
-    // 同じQRコードの連続読み取り防止（1.5秒以内）
+    // 連続読み取り防止（同じQRを1秒以内に再読み取りしない）
     const now = Date.now();
-    if (decodedText === lastScannedQr && (now - lastScanTime) < 1500) {
+    if (decodedText === lastScannedQr && now - lastScanTime < 1000) {
         return;
     }
     lastScannedQr = decodedText;
     lastScanTime = now;
     
-    // QRコードのパース
+    // QRコードをパース
     const parsed = parseQrCode(decodedText);
-    
     if (!parsed) {
-        showScanError('不明なQRコード形式です', decodedText);
+        showErrorToast('無効なQRコードです');
         return;
     }
     
     // 重複チェック
-    if (checkDuplicate(decodedText)) {
-        showDuplicateWarning(decodedText, parsed);
+    const isDuplicate = session.scannedBoxes.some(box => box.qrCode === decodedText);
+    if (isDuplicate) {
+        session.duplicateAttempts.push({
+            qrCode: decodedText,
+            timestamp: new Date()
+        });
+        showDuplicateDialog(parsed.productName);
         return;
     }
     
-    // 商品情報取得
-    const product = productMaster[parsed.productCode];
-    const productName = product ? product.name : `不明(${parsed.productCode})`;
-    
-    // スキャンデータ作成
-    const scanData = {
+    // 確認ダイアログを表示
+    scanPaused = true;
+    showScanConfirmDialog({
         qrCode: decodedText,
         productCode: parsed.productCode,
         year: parsed.year,
         boxNumber: parsed.boxNumber,
-        productName: productName,
-        timestamp: new Date().toISOString()
-    };
-    
-    // 確認画面を表示
-    showScanConfirmDialog(scanData);
+        productName: parsed.productName,
+        timestamp: new Date()
+    });
 }
 
 function onScanFailure(error) {
-    // 読み取り失敗は無視（連続スキャン中は頻繁に発生）
+    // スキャン失敗は無視（連続スキャン中は頻繁に発生する）
 }
 
 // ========================================
 // QRコードパース
 // ========================================
 
-function parseQrCode(qrCode) {
-    // フォーマット: [商品コード]-[年度(2桁)]-[箱連番(3〜4桁)]
-    // 例: HEALTH-25-001 または HEALTH-25-0001
-    const regex = /^([A-Z]+)-(\d{2})-(\d{3,4})$/;
-    const match = qrCode.match(regex);
+function parseQrCode(qrText) {
+    // 形式: PRODUCTCODE-YY-NNNN
+    const pattern = /^([A-Z]+)-(\d{2})-(\d{4})$/;
+    const match = qrText.match(pattern);
     
-    if (!match) {
-        return null;
-    }
+    if (!match) return null;
+    
+    const productCode = match[1];
+    const year = match[2];
+    const boxNumber = match[3];
+    
+    // 商品マスタで確認
+    const product = productMaster[productCode];
+    if (!product) return null;
     
     return {
-        productCode: match[1],
-        year: match[2],
-        boxNumber: match[3]
+        productCode,
+        year,
+        boxNumber,
+        productName: product.name
     };
-}
-
-// ========================================
-// 重複検知
-// ========================================
-
-function checkDuplicate(qrCode) {
-    return session.scannedBoxes.some(box => box.qrCode === qrCode);
-}
-
-function showDuplicateWarning(qrCode, parsed) {
-    const product = productMaster[parsed.productCode];
-    const productName = product ? product.name : parsed.productCode;
-    
-    elements.duplicateMessage.innerHTML = `
-        <strong>${productName}</strong><br>
-        <span style="font-family:monospace">${qrCode}</span>
-    `;
-    
-    // 重複試行をログに記録
-    session.duplicateAttempts.push({
-        qrCode: qrCode,
-        timestamp: new Date().toISOString()
-    });
-    
-    elements.duplicateDialog.classList.remove('hidden');
-    
-    // 振動フィードバック（対応端末のみ）
-    if (navigator.vibrate) {
-        navigator.vibrate([100, 50, 100]);
-    }
-}
-
-function hideDuplicateDialog() {
-    elements.duplicateDialog.classList.add('hidden');
-}
-
-// ========================================
-// エラー表示
-// ========================================
-
-function showScanError(message, qrCode) {
-    elements.lastScan.innerHTML = `
-        <span style="color:#F44336">${message}</span>
-        <span class="qr-code" style="font-size:0.8rem">${qrCode}</span>
-    `;
-    elements.lastScan.className = 'last-scan error';
-    
-    if (navigator.vibrate) {
-        navigator.vibrate([200, 100, 200]);
-    }
 }
 
 // ========================================
@@ -671,38 +788,57 @@ function showScanError(message, qrCode) {
 // ========================================
 
 function updateScanUI(scanData) {
-    // 最後の読み取り結果
+    // 最後のスキャン表示
     elements.lastScan.innerHTML = `
-        <span class="product-name">${scanData.productName}</span>
-        <span class="qr-code">${scanData.qrCode}</span>
+        <strong>${scanData.productName}</strong><br>
+        <span style="font-family: monospace; color: #666;">${scanData.qrCode}</span>
     `;
-    elements.lastScan.className = 'last-scan success';
     
     // カウント更新
     elements.scanCount.textContent = session.scannedBoxes.length;
     
-    // リストに追加
+    // リスト更新
     const listItem = document.createElement('div');
     listItem.className = 'scan-list-item';
     listItem.innerHTML = `
-        <span class="product-name">${scanData.productName}</span>
-        <span class="qr-code">${scanData.qrCode}</span>
+        <span class="scan-list-name">${scanData.productName}</span>
+        <span class="scan-list-qr">${scanData.qrCode}</span>
     `;
     elements.scanList.insertBefore(listItem, elements.scanList.firstChild);
 }
 
 function toggleScanList() {
-    const isHidden = elements.scanList.classList.toggle('hidden');
-    elements.btnToggleList.textContent = isHidden ? '一覧表示' : '一覧を隠す';
+    if (elements.scanList.classList.contains('hidden')) {
+        elements.scanList.classList.remove('hidden');
+        elements.btnToggleList.textContent = '一覧を閉じる';
+    } else {
+        elements.scanList.classList.add('hidden');
+        elements.btnToggleList.textContent = '一覧表示';
+    }
 }
 
-function showSuccessToast(message) {
-    elements.toastMessage.textContent = message;
-    elements.successToast.classList.add('show');
-    
-    setTimeout(() => {
-        elements.successToast.classList.remove('show');
-    }, 2000);
+function showScreen(screenId) {
+    document.querySelectorAll('.screen').forEach(screen => {
+        screen.classList.remove('active');
+    });
+    document.getElementById(screenId).classList.add('active');
+}
+
+// ========================================
+// 重複警告ダイアログ
+// ========================================
+
+function showDuplicateDialog(productName) {
+    elements.duplicateMessage.innerHTML = `
+        <strong>${productName}</strong><br>
+        この箱はすでに登録されています。<br>
+        数量は増えません。
+    `;
+    elements.duplicateDialog.classList.remove('hidden');
+}
+
+function hideDuplicateDialog() {
+    elements.duplicateDialog.classList.add('hidden');
 }
 
 // ========================================
@@ -711,7 +847,12 @@ function showSuccessToast(message) {
 
 function finishScan() {
     if (session.scannedBoxes.length === 0) {
-        alert('まだ何もスキャンされていません');
+        if (!confirm('読み取りデータがありません。終了しますか？')) {
+            return;
+        }
+        stopQrScanner();
+        checkStockAlerts();
+        showScreen('mode-select-screen');
         return;
     }
     
@@ -720,212 +861,119 @@ function finishScan() {
 }
 
 function showSummary() {
-    const summary = calculateSummary();
-    
-    // UI更新
+    // モード表示
     let modeText;
     if (session.mode === 'delivery') {
         modeText = '📦 納品';
+        elements.summaryModeIndicator.className = 'summary-mode delivery';
     } else if (session.mode === 'shipment') {
         modeText = '🚚 出庫';
+        elements.summaryModeIndicator.className = 'summary-mode shipment';
     } else {
         modeText = '📋 棚卸';
+        elements.summaryModeIndicator.className = 'summary-mode inventory';
     }
-    
     elements.summaryModeIndicator.textContent = modeText;
-    elements.summaryModeIndicator.className = `mode-indicator ${session.mode}`;
     
+    // 日時
     elements.summaryDatetime.textContent = formatDateTime(session.startTime);
-    elements.summaryTotalBoxes.textContent = summary.totalBoxes;
-    elements.summaryTotalQuantity.textContent = summary.totalQuantity;
     
-    // 在庫更新メッセージ
-    const stockUpdateInfo = document.getElementById('stock-update-info');
-    const stockUpdateMessage = document.getElementById('stock-update-message');
+    // 総数
+    elements.summaryTotalBoxes.textContent = session.scannedBoxes.length;
+    elements.summaryTotalQuantity.textContent = calculateTotalQuantity();
     
-    if (session.mode === 'delivery') {
-        stockUpdateInfo.style.display = 'block';
-        stockUpdateInfo.style.background = '#e8f5e9';
-        stockUpdateInfo.style.borderColor = '#4CAF50';
-        stockUpdateMessage.style.color = '#2e7d32';
-        stockUpdateMessage.textContent = `✅ 在庫が ${summary.totalQuantity}個 増加しました`;
-    } else if (session.mode === 'shipment') {
-        stockUpdateInfo.style.display = 'block';
-        stockUpdateInfo.style.background = '#fff3e0';
-        stockUpdateInfo.style.borderColor = '#FF9800';
-        stockUpdateMessage.style.color = '#e65100';
-        stockUpdateMessage.textContent = `📤 在庫が ${summary.totalQuantity}個 減少しました`;
-    } else {
-        stockUpdateInfo.style.display = 'none';
-    }
-    
-    // テーブル生成
+    // 商品別集計
+    const summary = calculateSummary();
     elements.summaryTbody.innerHTML = '';
-    summary.products.forEach(product => {
+    
+    Object.keys(summary).sort((a, b) => {
+        return summary[a].name.localeCompare(summary[b].name, 'ja');
+    }).forEach(code => {
+        const item = summary[code];
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${product.name}</td>
-            <td>${product.boxes}</td>
-            <td>${product.unitQuantity}</td>
-            <td><strong>${product.totalQuantity}</strong></td>
+            <td>${item.name}</td>
+            <td>${item.boxCount}箱</td>
+            <td>${item.quantity}個</td>
+            <td><strong>${item.total}個</strong></td>
         `;
         elements.summaryTbody.appendChild(row);
     });
+    
+    // 在庫更新メッセージ
+    const stockUpdateMessage = document.getElementById('stock-update-message');
+    if (stockUpdateMessage) {
+        if (session.mode === 'delivery') {
+            stockUpdateMessage.textContent = '✅ 在庫が自動で増加しました';
+            stockUpdateMessage.style.color = '#2e7d32';
+        } else if (session.mode === 'shipment') {
+            stockUpdateMessage.textContent = '✅ 在庫が自動で減少しました';
+            stockUpdateMessage.style.color = '#e65100';
+        } else {
+            stockUpdateMessage.textContent = '';
+        }
+    }
     
     showScreen('summary-screen');
 }
 
 function calculateSummary() {
-    const productCounts = {};
+    const summary = {};
     
     session.scannedBoxes.forEach(box => {
-        if (!productCounts[box.productCode]) {
-            productCounts[box.productCode] = {
-                code: box.productCode,
+        if (!summary[box.productCode]) {
+            const product = productMaster[box.productCode];
+            summary[box.productCode] = {
                 name: box.productName,
-                boxes: 0
+                boxCount: 0,
+                quantity: product ? product.quantity : 0,
+                total: 0
             };
         }
-        productCounts[box.productCode].boxes++;
+        summary[box.productCode].boxCount++;
+        summary[box.productCode].total = summary[box.productCode].boxCount * summary[box.productCode].quantity;
     });
     
-    const products = Object.values(productCounts).map(product => {
-        const master = productMaster[product.code];
-        const unitQuantity = master ? master.quantity : 0;
-        return {
-            code: product.code,
-            name: product.name,
-            boxes: product.boxes,
-            unitQuantity: unitQuantity,
-            totalQuantity: product.boxes * unitQuantity
-        };
-    }).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-    
-    const totalBoxes = products.reduce((sum, p) => sum + p.boxes, 0);
-    const totalQuantity = products.reduce((sum, p) => sum + p.totalQuantity, 0);
-    
-    return { products, totalBoxes, totalQuantity };
+    return summary;
+}
+
+function calculateTotalQuantity() {
+    let total = 0;
+    session.scannedBoxes.forEach(box => {
+        const product = productMaster[box.productCode];
+        if (product) {
+            total += product.quantity;
+        }
+    });
+    return total;
 }
 
 // ========================================
-// CSV出力
+// トースト通知
 // ========================================
 
-function generateCsvContent() {
-    const summary = calculateSummary();
+function showSuccessToast(message) {
+    elements.toastMessage.textContent = message;
+    elements.successToast.classList.remove('hidden');
+    elements.successToast.classList.add('show');
     
-    // CSVヘッダー
-    let csv = '\uFEFF'; // BOM for Excel
-    csv += '商品コード,商品名,箱数,入数,合計数量\n';
-    
-    // データ行
-    summary.products.forEach(product => {
-        csv += `${product.code},${product.name},${product.boxes},${product.unitQuantity},${product.totalQuantity}\n`;
-    });
-    
-    // 合計行
-    csv += `合計,,${summary.totalBoxes},,${summary.totalQuantity}\n`;
-    
-    return csv;
+    setTimeout(() => {
+        elements.successToast.classList.remove('show');
+        elements.successToast.classList.add('hidden');
+    }, 2000);
 }
 
-function generateCsvFilename() {
-    const dateStr = formatDateTimeForFilename(session.startTime);
-    return `omamori_${session.mode}_${dateStr}.csv`;
-}
-
-function exportCsvDownload() {
-    const csv = generateCsvContent();
-    const filename = generateCsvFilename();
+function showErrorToast(message) {
+    elements.toastMessage.textContent = message;
+    elements.successToast.style.background = '#F44336';
+    elements.successToast.classList.remove('hidden');
+    elements.successToast.classList.add('show');
     
-    // ダウンロード
-    downloadFile(csv, filename, 'text/csv;charset=utf-8');
-    
-    showSuccessToast('CSVをダウンロードしました');
-}
-
-async function shareCsvFile() {
-    const summary = calculateSummary();
-    let modeText;
-    if (session.mode === 'delivery') {
-        modeText = '納品';
-    } else if (session.mode === 'shipment') {
-        modeText = '出庫';
-    } else {
-        modeText = '棚卸';
-    }
-    const dateStr = formatDateTime(session.startTime);
-    const filename = generateCsvFilename();
-    
-    // CSVファイルを作成
-    const csvContent = generateCsvContent();
-    const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
-    const csvFile = new File([csvBlob], filename, { type: 'text/csv' });
-    
-    // 共有テキストを作成
-    let shareText = `お守り在庫管理 ${modeText}結果\n`;
-    shareText += `日時: ${dateStr}\n\n`;
-    shareText += `【集計結果】\n`;
-    shareText += `総箱数: ${summary.totalBoxes}箱\n`;
-    shareText += `総数量: ${summary.totalQuantity}個\n\n`;
-    shareText += `【商品別内訳】\n`;
-    
-    summary.products.forEach(product => {
-        shareText += `${product.name}: ${product.boxes}箱 × ${product.unitQuantity}個 = ${product.totalQuantity}個\n`;
-    });
-    
-    // Web Share APIで共有
-    try {
-        const shareData = {
-            title: `お守り在庫管理 ${modeText}結果`,
-            text: shareText,
-            files: [csvFile]
-        };
-        
-        // ファイル共有がサポートされているか確認
-        if (navigator.canShare && navigator.canShare(shareData)) {
-            await navigator.share(shareData);
-            document.getElementById('email-dialog').classList.add('hidden');
-            showSuccessToast('共有しました');
-        } else {
-            // ファイル共有がサポートされていない場合はテキストのみ共有
-            const textOnlyData = {
-                title: `お守り在庫管理 ${modeText}結果`,
-                text: shareText
-            };
-            await navigator.share(textOnlyData);
-            document.getElementById('email-dialog').classList.add('hidden');
-            showSuccessToast('共有しました（テキストのみ）');
-            // CSVもダウンロード
-            exportCsvDownload();
-        }
-    } catch (err) {
-        if (err.name === 'AbortError') {
-            // ユーザーがキャンセルした場合
-            console.log('共有がキャンセルされました');
-        } else {
-            console.error('共有エラー:', err);
-            alert('共有に失敗しました。ダウンロードをお試しください。');
-        }
-    }
-}
-
-// 従来のexportCsv関数（互換性のため残す）
-function exportCsv() {
-    showExportOptions();
-}
-
-function downloadFile(content, filename, mimeType) {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+        elements.successToast.classList.remove('show');
+        elements.successToast.classList.add('hidden');
+        elements.successToast.style.background = '';
+    }, 2000);
 }
 
 // ========================================
@@ -942,7 +990,7 @@ function formatDateTime(date) {
     return `${year}/${month}/${day} ${hour}:${minute}`;
 }
 
-function formatDateTimeForFilename(date) {
+function formatDateForFilename(date) {
     const d = new Date(date);
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -952,39 +1000,19 @@ function formatDateTimeForFilename(date) {
     return `${year}${month}${day}_${hour}${minute}`;
 }
 
-// ========================================
-// マスタ管理
-// ========================================
-
 function loadMasterFromStorage() {
     const stored = localStorage.getItem('omamori_master');
     if (stored) {
         try {
             productMaster = JSON.parse(stored);
+            // 単価がない場合は追加
+            Object.keys(productMaster).forEach(code => {
+                if (productMaster[code].unitPrice === undefined) {
+                    productMaster[code].unitPrice = 0;
+                }
+            });
         } catch (e) {
-            console.error('マスタ読み込みエラー:', e);
             productMaster = { ...DEFAULT_MASTER };
         }
     }
 }
-
-function saveMasterToStorage() {
-    localStorage.setItem('omamori_master', JSON.stringify(productMaster));
-}
-
-// デバッグ用：コンソールからマスタを確認・更新可能
-window.omamoriApp = {
-    getSession: () => session,
-    getMaster: () => productMaster,
-    setMaster: (master) => {
-        productMaster = master;
-        saveMasterToStorage();
-    },
-    resetMaster: () => {
-        productMaster = { ...DEFAULT_MASTER };
-        saveMasterToStorage();
-    },
-    getStock: getStock,
-    updateStock: updateStock,
-    checkStockAlerts: checkStockAlerts
-};

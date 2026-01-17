@@ -28,7 +28,7 @@
             font-size: 1.5rem;
         }
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 20px;
         }
@@ -47,6 +47,35 @@
             display: flex;
             align-items: center;
             gap: 8px;
+        }
+        
+        /* タブ */
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #eee;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.2s;
+        }
+        .tab:hover {
+            color: #8B0000;
+        }
+        .tab.active {
+            color: #8B0000;
+            border-bottom-color: #8B0000;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
         }
         
         /* アラートボックス */
@@ -91,49 +120,77 @@
             color: #c62828;
         }
         
-        /* 在庫テーブル */
-        .stock-table {
+        /* テーブル共通 */
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
             width: 100%;
             border-collapse: collapse;
+            min-width: 600px;
         }
-        .stock-table th,
-        .stock-table td {
-            padding: 12px 8px;
+        th, td {
+            padding: 10px 8px;
             text-align: left;
             border-bottom: 1px solid #eee;
         }
-        .stock-table th {
+        th {
             background: #f9f9f9;
             font-weight: 600;
             color: #333;
+            white-space: nowrap;
         }
-        .stock-table tr:hover {
+        tr:hover {
             background: #fafafa;
         }
-        .stock-table .product-name {
-            font-weight: 600;
-        }
-        .stock-table .stock-value {
-            font-size: 1.1rem;
-            font-weight: bold;
-        }
-        .stock-table .stock-value.low {
-            color: #f44336;
-        }
-        .stock-table .stock-value.normal {
-            color: #4CAF50;
-        }
-        .stock-table input[type="number"] {
-            width: 80px;
+        
+        /* 入力フィールド */
+        input[type="number"],
+        input[type="date"],
+        select {
             padding: 8px;
             border: 1px solid #ddd;
             border-radius: 4px;
-            font-size: 1rem;
+            font-size: 0.9rem;
+        }
+        input[type="number"] {
+            width: 80px;
             text-align: center;
         }
-        .stock-table input[type="number"]:focus {
+        input[type="date"] {
+            width: 140px;
+        }
+        select {
+            width: 100px;
+        }
+        input:focus, select:focus {
             outline: none;
             border-color: #8B0000;
+        }
+        
+        /* ステータス表示 */
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .status-badge.low {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .status-badge.normal {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .status-badge.ordered {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        .status-badge.not-ordered {
+            background: #fff3e0;
+            color: #e65100;
         }
         
         /* ボタン */
@@ -179,20 +236,59 @@
             flex-wrap: wrap;
         }
         
+        /* 統計カード */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .stat-card .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #8B0000;
+        }
+        .stat-card .stat-label {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 4px;
+        }
+        .stat-card.warning .stat-value {
+            color: #f44336;
+        }
+        .stat-card.info .stat-value {
+            color: #2196F3;
+        }
+        
+        /* 請求金額表示 */
+        .total-amount {
+            background: linear-gradient(135deg, #1565c0 0%, #1976d2 100%);
+            color: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .total-amount .label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        .total-amount .amount {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-top: 8px;
+        }
+        
         /* 履歴テーブル */
         .history-table {
-            width: 100%;
-            border-collapse: collapse;
             font-size: 0.9rem;
-        }
-        .history-table th,
-        .history-table td {
-            padding: 8px;
-            text-align: left;
-            border-bottom: 1px solid #eee;
-        }
-        .history-table th {
-            background: #f9f9f9;
         }
         .history-table .type-in {
             color: #4CAF50;
@@ -240,32 +336,31 @@
             color: #1565C0;
         }
         
-        /* 統計カード */
-        .stats-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 16px;
-            margin-bottom: 20px;
+        .product-name-cell {
+            font-weight: 600;
         }
-        .stat-card {
-            background: white;
-            border-radius: 8px;
-            padding: 16px;
-            text-align: center;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        .product-code {
+            font-size: 0.75rem;
+            color: #999;
         }
-        .stat-card .stat-value {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #8B0000;
-        }
-        .stat-card .stat-label {
-            font-size: 0.85rem;
-            color: #666;
-            margin-top: 4px;
-        }
-        .stat-card.warning .stat-value {
-            color: #f44336;
+        
+        @media (max-width: 600px) {
+            .tabs {
+                flex-wrap: wrap;
+            }
+            .tab {
+                padding: 10px 12px;
+                font-size: 0.9rem;
+            }
+            input[type="number"] {
+                width: 60px;
+            }
+            input[type="date"] {
+                width: 120px;
+            }
+            select {
+                width: 80px;
+            }
         }
     </style>
 </head>
@@ -277,7 +372,7 @@
     <div class="container">
         <!-- 在庫不足アラート -->
         <div id="alert-box" class="alert-box hidden">
-            <h3>⚠️ 在庫不足のお守り</h3>
+            <h3>⚠️ 安心在庫を下回っているお守り</h3>
             <div id="alert-list"></div>
         </div>
 
@@ -295,52 +390,111 @@
                 <div class="stat-value" id="low-stock-count">0</div>
                 <div class="stat-label">在庫不足</div>
             </div>
-        </div>
-
-        <!-- 在庫一覧 -->
-        <div class="section">
-            <h2>📦 在庫一覧・設定</h2>
-            <div class="info-box">
-                <strong>💡 使い方:</strong><br>
-                ・「現在庫」に手動で在庫数を入力できます<br>
-                ・「通知数」を設定すると、在庫がその数を下回った時にアラートが表示されます<br>
-                ・納品モード/出庫モードでQRを読み取ると自動で在庫が増減します
-            </div>
-            <table class="stock-table">
-                <thead>
-                    <tr>
-                        <th>商品名</th>
-                        <th>現在庫</th>
-                        <th>通知数</th>
-                        <th>状態</th>
-                    </tr>
-                </thead>
-                <tbody id="stock-tbody"></tbody>
-            </table>
-            <div class="button-row">
-                <button class="btn btn-primary" onclick="saveStock()">💾 保存</button>
-                <button class="btn btn-secondary" onclick="resetStock()">🔄 リセット</button>
+            <div class="stat-card info">
+                <div class="stat-value" id="ordered-count">0</div>
+                <div class="stat-label">発注中</div>
             </div>
         </div>
 
-        <!-- 在庫変動履歴 -->
-        <div class="section">
-            <h2>📋 在庫変動履歴</h2>
-            <table class="history-table">
-                <thead>
-                    <tr>
-                        <th>日時</th>
-                        <th>種別</th>
-                        <th>商品</th>
-                        <th>数量</th>
-                        <th>備考</th>
-                    </tr>
-                </thead>
-                <tbody id="history-tbody"></tbody>
-            </table>
-            <div class="button-row">
-                <button class="btn btn-secondary" onclick="clearHistory()">🗑️ 履歴クリア</button>
-                <button class="btn btn-secondary" onclick="exportHistory()">📥 履歴CSV出力</button>
+        <!-- タブ -->
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('stock')">📦 在庫設定</div>
+            <div class="tab" onclick="switchTab('order')">📝 発注状況</div>
+            <div class="tab" onclick="switchTab('history')">📋 履歴</div>
+        </div>
+
+        <!-- 在庫設定タブ -->
+        <div id="tab-stock" class="tab-content active">
+            <div class="section">
+                <h2>📦 在庫一覧・安心在庫設定</h2>
+                <div class="info-box">
+                    <strong>💡 使い方:</strong><br>
+                    ・「現在庫」に手動で在庫数を入力できます<br>
+                    ・「安心在庫」を設定すると、在庫がその数を下回った時にアラートが表示されます<br>
+                    ・納品モード/出庫モードでQRを読み取ると自動で在庫が増減します
+                </div>
+                <div class="table-container">
+                    <table class="stock-table">
+                        <thead>
+                            <tr>
+                                <th>商品名</th>
+                                <th>現在庫</th>
+                                <th>安心在庫</th>
+                                <th>状態</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stock-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="button-row">
+                    <button class="btn btn-primary" onclick="saveStock()">💾 保存</button>
+                    <button class="btn btn-secondary" onclick="resetStock()">🔄 リセット</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 発注状況タブ -->
+        <div id="tab-order" class="tab-content">
+            <div class="section">
+                <h2>📝 発注状況管理</h2>
+                <div class="info-box">
+                    <strong>💡 使い方:</strong><br>
+                    ・各お守りの発注状況を記録できます<br>
+                    ・発注数と納期を入力すると、請求金額が自動計算されます<br>
+                    ・単価は「商品マスタ編集」で設定してください
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>商品名</th>
+                                <th>発注状況</th>
+                                <th>発注数</th>
+                                <th>納期</th>
+                                <th>単価</th>
+                                <th>金額</th>
+                            </tr>
+                        </thead>
+                        <tbody id="order-tbody"></tbody>
+                    </table>
+                </div>
+                
+                <!-- 請求金額合計 -->
+                <div class="total-amount">
+                    <div class="label">発注中の請求金額合計（税込）</div>
+                    <div class="amount" id="total-order-amount">¥0</div>
+                </div>
+                
+                <div class="button-row">
+                    <button class="btn btn-primary" onclick="saveOrders()">💾 発注状況を保存</button>
+                    <button class="btn btn-secondary" onclick="clearOrders()">🔄 発注状況をクリア</button>
+                    <button class="btn btn-secondary" onclick="exportOrders()">📥 発注一覧CSV出力</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 履歴タブ -->
+        <div id="tab-history" class="tab-content">
+            <div class="section">
+                <h2>📋 在庫変動履歴</h2>
+                <div class="table-container">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>日時</th>
+                                <th>種別</th>
+                                <th>商品</th>
+                                <th>数量</th>
+                                <th>備考</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="button-row">
+                    <button class="btn btn-secondary" onclick="clearHistory()">🗑️ 履歴クリア</button>
+                    <button class="btn btn-secondary" onclick="exportHistory()">📥 履歴CSV出力</button>
+                </div>
             </div>
         </div>
 
@@ -352,28 +506,42 @@
     <script>
         // デフォルトマスタ
         const DEFAULT_MASTER = {
-            'HEALTH': { name: '健康守り', quantity: 50 },
-            'TRAFFIC': { name: '交通安全守り', quantity: 50 },
-            'STUDY': { name: '学業成就守り', quantity: 40 },
-            'LOVE': { name: '縁結び守り', quantity: 30 },
-            'MONEY': { name: '金運守り', quantity: 40 },
-            'CHILD': { name: '子授け守り', quantity: 40 },
-            'SAFE': { name: '安産守り', quantity: 40 },
-            'YAKUYOKE': { name: '厄除け守り', quantity: 50 }
+            'HEALTH': { name: '健康守り', quantity: 50, unitPrice: 0 },
+            'TRAFFIC': { name: '交通安全守り', quantity: 50, unitPrice: 0 },
+            'STUDY': { name: '学業成就守り', quantity: 40, unitPrice: 0 },
+            'LOVE': { name: '縁結び守り', quantity: 30, unitPrice: 0 },
+            'MONEY': { name: '金運守り', quantity: 40, unitPrice: 0 },
+            'CHILD': { name: '子授け守り', quantity: 40, unitPrice: 0 },
+            'SAFE': { name: '安産守り', quantity: 40, unitPrice: 0 },
+            'YAKUYOKE': { name: '厄除け守り', quantity: 50, unitPrice: 0 }
         };
 
         let master = {};
-        let stockData = {}; // { productCode: { stock: 数量, alertThreshold: 通知数 } }
+        let stockData = {}; // { productCode: { stock: 数量, safeStock: 安心在庫 } }
+        let orderData = {}; // { productCode: { ordered: true/false, quantity: 発注数, deliveryDate: 納期 } }
 
         // 初期化
         document.addEventListener('DOMContentLoaded', function() {
             loadMaster();
             loadStock();
+            loadOrders();
             renderStockTable();
+            renderOrderTable();
             loadHistory();
             checkAlerts();
             updateStats();
         });
+
+        // タブ切り替え
+        function switchTab(tabName) {
+            // タブボタンの状態更新
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // タブコンテンツの表示切り替え
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById('tab-' + tabName).classList.add('active');
+        }
 
         // マスタ読み込み
         function loadMaster() {
@@ -381,6 +549,12 @@
             if (stored) {
                 try {
                     master = JSON.parse(stored);
+                    // 単価がない場合は追加
+                    Object.keys(master).forEach(code => {
+                        if (master[code].unitPrice === undefined) {
+                            master[code].unitPrice = 0;
+                        }
+                    });
                 } catch (e) {
                     master = { ...DEFAULT_MASTER };
                 }
@@ -395,6 +569,16 @@
             if (stored) {
                 try {
                     stockData = JSON.parse(stored);
+                    // 旧形式（alertThreshold）から新形式（safeStock）への移行
+                    Object.keys(stockData).forEach(code => {
+                        if (stockData[code].alertThreshold !== undefined && stockData[code].safeStock === undefined) {
+                            stockData[code].safeStock = stockData[code].alertThreshold;
+                            delete stockData[code].alertThreshold;
+                        }
+                        if (stockData[code].safeStock === undefined) {
+                            stockData[code].safeStock = 10;
+                        }
+                    });
                 } catch (e) {
                     stockData = {};
                 }
@@ -405,7 +589,30 @@
                 if (!stockData[code]) {
                     stockData[code] = {
                         stock: 0,
-                        alertThreshold: 10
+                        safeStock: 10
+                    };
+                }
+            });
+        }
+
+        // 発注データ読み込み
+        function loadOrders() {
+            const stored = localStorage.getItem('omamori_orders');
+            if (stored) {
+                try {
+                    orderData = JSON.parse(stored);
+                } catch (e) {
+                    orderData = {};
+                }
+            }
+            
+            // マスタにあって発注データにない商品を初期化
+            Object.keys(master).forEach(code => {
+                if (!orderData[code]) {
+                    orderData[code] = {
+                        ordered: false,
+                        quantity: 0,
+                        deliveryDate: ''
                     };
                 }
             });
@@ -420,12 +627,15 @@
                 return master[a].name.localeCompare(master[b].name, 'ja');
             }).forEach(code => {
                 const product = master[code];
-                const stock = stockData[code] || { stock: 0, alertThreshold: 10 };
-                const isLow = stock.stock <= stock.alertThreshold;
+                const stock = stockData[code] || { stock: 0, safeStock: 10 };
+                const isLow = stock.stock < stock.safeStock;
 
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td class="product-name">${product.name}<br><small style="color:#999">${code}</small></td>
+                    <td class="product-name-cell">
+                        ${product.name}<br>
+                        <span class="product-code">${code}</span>
+                    </td>
                     <td>
                         <input type="number" 
                                id="stock-${code}" 
@@ -435,12 +645,13 @@
                     </td>
                     <td>
                         <input type="number" 
-                               id="alert-${code}" 
-                               value="${stock.alertThreshold}" 
-                               min="0">
+                               id="safe-${code}" 
+                               value="${stock.safeStock}" 
+                               min="0"
+                               onchange="onStockChange('${code}')">
                     </td>
                     <td>
-                        <span class="stock-value ${isLow ? 'low' : 'normal'}">
+                        <span class="status-badge ${isLow ? 'low' : 'normal'}">
                             ${isLow ? '⚠️ 不足' : '✅ 正常'}
                         </span>
                     </td>
@@ -449,32 +660,115 @@
             });
         }
 
+        // 発注テーブル描画
+        function renderOrderTable() {
+            const tbody = document.getElementById('order-tbody');
+            tbody.innerHTML = '';
+
+            Object.keys(master).sort((a, b) => {
+                return master[a].name.localeCompare(master[b].name, 'ja');
+            }).forEach(code => {
+                const product = master[code];
+                const order = orderData[code] || { ordered: false, quantity: 0, deliveryDate: '' };
+                const unitPrice = product.unitPrice || 0;
+                const amount = order.ordered && order.quantity > 0 ? unitPrice * order.quantity : 0;
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="product-name-cell">
+                        ${product.name}<br>
+                        <span class="product-code">${code}</span>
+                    </td>
+                    <td>
+                        <select id="order-status-${code}" onchange="onOrderChange('${code}')">
+                            <option value="false" ${!order.ordered ? 'selected' : ''}>未発注</option>
+                            <option value="true" ${order.ordered ? 'selected' : ''}>発注済</option>
+                        </select>
+                    </td>
+                    <td>
+                        <input type="number" 
+                               id="order-qty-${code}" 
+                               value="${order.quantity}" 
+                               min="0"
+                               onchange="onOrderChange('${code}')">
+                    </td>
+                    <td>
+                        <input type="date" 
+                               id="order-date-${code}" 
+                               value="${order.deliveryDate}"
+                               onchange="onOrderChange('${code}')">
+                    </td>
+                    <td>¥${unitPrice.toLocaleString()}</td>
+                    <td id="order-amount-${code}">¥${amount.toLocaleString()}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            updateTotalAmount();
+        }
+
         // 在庫変更時のハンドラ
         function onStockChange(code) {
-            // リアルタイムで状態を更新
             const stockInput = document.getElementById(`stock-${code}`);
-            const alertInput = document.getElementById(`alert-${code}`);
+            const safeInput = document.getElementById(`safe-${code}`);
             const stock = parseInt(stockInput.value) || 0;
-            const threshold = parseInt(alertInput.value) || 0;
+            const safeStock = parseInt(safeInput.value) || 0;
             
             const row = stockInput.closest('tr');
-            const statusCell = row.querySelector('.stock-value');
-            const isLow = stock <= threshold;
+            const statusCell = row.querySelector('.status-badge');
+            const isLow = stock < safeStock;
             
-            statusCell.className = `stock-value ${isLow ? 'low' : 'normal'}`;
-            statusCell.textContent = isLow ? '⚠️ 不足' : '✅ 正常';
+            statusCell.className = `status-badge ${isLow ? 'low' : 'normal'}`;
+            statusCell.innerHTML = isLow ? '⚠️ 不足' : '✅ 正常';
+        }
+
+        // 発注変更時のハンドラ
+        function onOrderChange(code) {
+            const statusSelect = document.getElementById(`order-status-${code}`);
+            const qtyInput = document.getElementById(`order-qty-${code}`);
+            const amountCell = document.getElementById(`order-amount-${code}`);
+            
+            const ordered = statusSelect.value === 'true';
+            const quantity = parseInt(qtyInput.value) || 0;
+            const unitPrice = master[code] ? (master[code].unitPrice || 0) : 0;
+            const amount = ordered && quantity > 0 ? unitPrice * quantity : 0;
+            
+            amountCell.textContent = `¥${amount.toLocaleString()}`;
+            updateTotalAmount();
+        }
+
+        // 請求金額合計更新
+        function updateTotalAmount() {
+            let total = 0;
+            
+            Object.keys(master).forEach(code => {
+                const statusSelect = document.getElementById(`order-status-${code}`);
+                const qtyInput = document.getElementById(`order-qty-${code}`);
+                
+                if (statusSelect && qtyInput) {
+                    const ordered = statusSelect.value === 'true';
+                    const quantity = parseInt(qtyInput.value) || 0;
+                    const unitPrice = master[code] ? (master[code].unitPrice || 0) : 0;
+                    
+                    if (ordered && quantity > 0) {
+                        total += unitPrice * quantity;
+                    }
+                }
+            });
+            
+            document.getElementById('total-order-amount').textContent = `¥${total.toLocaleString()}`;
         }
 
         // 在庫保存
         function saveStock() {
             Object.keys(master).forEach(code => {
                 const stockInput = document.getElementById(`stock-${code}`);
-                const alertInput = document.getElementById(`alert-${code}`);
+                const safeInput = document.getElementById(`safe-${code}`);
                 
-                if (stockInput && alertInput) {
+                if (stockInput && safeInput) {
                     stockData[code] = {
                         stock: parseInt(stockInput.value) || 0,
-                        alertThreshold: parseInt(alertInput.value) || 0
+                        safeStock: parseInt(safeInput.value) || 0
                     };
                 }
             });
@@ -483,6 +777,27 @@
             checkAlerts();
             updateStats();
             showToast('在庫データを保存しました', 'success');
+        }
+
+        // 発注状況保存
+        function saveOrders() {
+            Object.keys(master).forEach(code => {
+                const statusSelect = document.getElementById(`order-status-${code}`);
+                const qtyInput = document.getElementById(`order-qty-${code}`);
+                const dateInput = document.getElementById(`order-date-${code}`);
+                
+                if (statusSelect && qtyInput && dateInput) {
+                    orderData[code] = {
+                        ordered: statusSelect.value === 'true',
+                        quantity: parseInt(qtyInput.value) || 0,
+                        deliveryDate: dateInput.value
+                    };
+                }
+            });
+
+            localStorage.setItem('omamori_orders', JSON.stringify(orderData));
+            updateStats();
+            showToast('発注状況を保存しました', 'success');
         }
 
         // 在庫リセット
@@ -495,7 +810,7 @@
             Object.keys(master).forEach(code => {
                 stockData[code] = {
                     stock: 0,
-                    alertThreshold: 10
+                    safeStock: 10
                 };
             });
 
@@ -504,6 +819,27 @@
             checkAlerts();
             updateStats();
             showToast('在庫データをリセットしました', 'success');
+        }
+
+        // 発注状況クリア
+        function clearOrders() {
+            if (!confirm('すべての発注状況をクリアしますか？')) {
+                return;
+            }
+
+            orderData = {};
+            Object.keys(master).forEach(code => {
+                orderData[code] = {
+                    ordered: false,
+                    quantity: 0,
+                    deliveryDate: ''
+                };
+            });
+
+            localStorage.setItem('omamori_orders', JSON.stringify(orderData));
+            renderOrderTable();
+            updateStats();
+            showToast('発注状況をクリアしました', 'success');
         }
 
         // アラートチェック
@@ -516,16 +852,16 @@
 
             Object.keys(master).forEach(code => {
                 const product = master[code];
-                const stock = stockData[code] || { stock: 0, alertThreshold: 10 };
+                const stock = stockData[code] || { stock: 0, safeStock: 10 };
                 
-                if (stock.stock <= stock.alertThreshold) {
+                if (stock.stock < stock.safeStock) {
                     hasAlerts = true;
                     const item = document.createElement('div');
                     item.className = 'alert-item';
                     item.innerHTML = `
                         <span class="product-name">${product.name}</span>
                         <span class="stock-info">
-                            現在: <strong>${stock.stock}個</strong> / 通知: ${stock.alertThreshold}個
+                            現在: <strong>${stock.stock}個</strong> / 安心在庫: ${stock.safeStock}個
                         </span>
                     `;
                     alertList.appendChild(item);
@@ -544,20 +880,26 @@
             const totalProducts = Object.keys(master).length;
             let totalStock = 0;
             let lowStockCount = 0;
+            let orderedCount = 0;
 
             Object.keys(master).forEach(code => {
-                const stock = stockData[code] || { stock: 0, alertThreshold: 10 };
+                const stock = stockData[code] || { stock: 0, safeStock: 10 };
+                const order = orderData[code] || { ordered: false };
+                
                 totalStock += stock.stock;
-                if (stock.stock <= stock.alertThreshold) {
+                if (stock.stock < stock.safeStock) {
                     lowStockCount++;
+                }
+                if (order.ordered) {
+                    orderedCount++;
                 }
             });
 
             document.getElementById('total-products').textContent = totalProducts;
             document.getElementById('total-stock').textContent = totalStock;
             document.getElementById('low-stock-count').textContent = lowStockCount;
+            document.getElementById('ordered-count').textContent = orderedCount;
 
-            // 在庫不足がなければカードの色を変更
             const lowStockCard = document.getElementById('low-stock-card');
             if (lowStockCount === 0) {
                 lowStockCard.classList.remove('warning');
@@ -613,7 +955,7 @@
                 return;
             }
 
-            let csv = '\uFEFF'; // BOM
+            let csv = '\uFEFF';
             csv += '日時,種別,商品名,商品コード,数量,備考\n';
             
             history.forEach(item => {
@@ -622,17 +964,37 @@
                 csv += `${item.date},${typeText},${item.productName},${item.productCode},${sign}${item.quantity},${item.note || ''}\n`;
             });
 
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `omamori_stock_history_${formatDateForFilename(new Date())}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
+            downloadFile(csv, `omamori_stock_history_${formatDateForFilename(new Date())}.csv`, 'text/csv;charset=utf-8');
             showToast('履歴CSVをダウンロードしました', 'success');
+        }
+
+        // 発注一覧CSV出力
+        function exportOrders() {
+            let csv = '\uFEFF';
+            csv += '商品コード,商品名,発注状況,発注数,納期,単価,金額\n';
+            
+            let hasOrders = false;
+            
+            Object.keys(master).sort((a, b) => master[a].name.localeCompare(master[b].name, 'ja')).forEach(code => {
+                const product = master[code];
+                const order = orderData[code] || { ordered: false, quantity: 0, deliveryDate: '' };
+                const unitPrice = product.unitPrice || 0;
+                const amount = order.ordered && order.quantity > 0 ? unitPrice * order.quantity : 0;
+                
+                if (order.ordered) {
+                    hasOrders = true;
+                }
+                
+                csv += `${code},${product.name},${order.ordered ? '発注済' : '未発注'},${order.quantity},${order.deliveryDate},${unitPrice},${amount}\n`;
+            });
+
+            if (!hasOrders) {
+                showToast('発注中の商品がありません', 'error');
+                return;
+            }
+
+            downloadFile(csv, `omamori_orders_${formatDateForFilename(new Date())}.csv`, 'text/csv;charset=utf-8');
+            showToast('発注一覧CSVをダウンロードしました', 'success');
         }
 
         // ユーティリティ
@@ -642,6 +1004,18 @@
             const month = String(d.getMonth() + 1).padStart(2, '0');
             const day = String(d.getDate()).padStart(2, '0');
             return `${year}${month}${day}`;
+        }
+
+        function downloadFile(content, filename, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         function showToast(message, type) {
@@ -659,7 +1033,7 @@
             addStock: function(productCode, quantity, note) {
                 loadStock();
                 if (!stockData[productCode]) {
-                    stockData[productCode] = { stock: 0, alertThreshold: 10 };
+                    stockData[productCode] = { stock: 0, safeStock: 10 };
                 }
                 stockData[productCode].stock += quantity;
                 localStorage.setItem('omamori_stock', JSON.stringify(stockData));
@@ -668,17 +1042,53 @@
                 addHistory('in', productCode, quantity, note);
             },
             
-            // 在庫を減らす（出庫時）
+            // 在庫を減らす（出庫時）- 安心在庫チェック結果を返す
             removeStock: function(productCode, quantity, note) {
                 loadStock();
+                loadMaster();
+                
                 if (!stockData[productCode]) {
-                    stockData[productCode] = { stock: 0, alertThreshold: 10 };
+                    stockData[productCode] = { stock: 0, safeStock: 10 };
                 }
+                
+                const beforeStock = stockData[productCode].stock;
                 stockData[productCode].stock = Math.max(0, stockData[productCode].stock - quantity);
+                const afterStock = stockData[productCode].stock;
+                const safeStock = stockData[productCode].safeStock;
+                
                 localStorage.setItem('omamori_stock', JSON.stringify(stockData));
                 
                 // 履歴に追加
                 addHistory('out', productCode, quantity, note);
+                
+                // 安心在庫を下回ったかチェック
+                const productName = master[productCode] ? master[productCode].name : productCode;
+                if (afterStock < safeStock && beforeStock >= safeStock) {
+                    // 今回の出庫で安心在庫を下回った
+                    return {
+                        belowSafeStock: true,
+                        justBecameLow: true,
+                        productName: productName,
+                        currentStock: afterStock,
+                        safeStock: safeStock
+                    };
+                } else if (afterStock < safeStock) {
+                    // 既に安心在庫を下回っていた
+                    return {
+                        belowSafeStock: true,
+                        justBecameLow: false,
+                        productName: productName,
+                        currentStock: afterStock,
+                        safeStock: safeStock
+                    };
+                }
+                
+                return {
+                    belowSafeStock: false,
+                    productName: productName,
+                    currentStock: afterStock,
+                    safeStock: safeStock
+                };
             },
             
             // 現在の在庫を取得
@@ -687,19 +1097,25 @@
                 return stockData[productCode] ? stockData[productCode].stock : 0;
             },
             
-            // 在庫不足チェック
+            // 安心在庫を取得
+            getSafeStock: function(productCode) {
+                loadStock();
+                return stockData[productCode] ? stockData[productCode].safeStock : 10;
+            },
+            
+            // 在庫不足チェック（安心在庫基準）
             checkLowStock: function() {
                 loadStock();
                 loadMaster();
                 const lowItems = [];
                 Object.keys(master).forEach(code => {
-                    const stock = stockData[code] || { stock: 0, alertThreshold: 10 };
-                    if (stock.stock <= stock.alertThreshold) {
+                    const stock = stockData[code] || { stock: 0, safeStock: 10 };
+                    if (stock.stock < stock.safeStock) {
                         lowItems.push({
                             code: code,
                             name: master[code].name,
                             stock: stock.stock,
-                            threshold: stock.alertThreshold
+                            safeStock: stock.safeStock
                         });
                     }
                 });
@@ -709,6 +1125,7 @@
 
         // 履歴追加（内部関数）
         function addHistory(type, productCode, quantity, note) {
+            loadMaster();
             const history = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
             const productName = master[productCode] ? master[productCode].name : productCode;
             

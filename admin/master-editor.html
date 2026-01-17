@@ -25,7 +25,7 @@
             font-size: 1.5rem;
         }
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 20px;
         }
@@ -60,10 +60,14 @@
             font-size: 0.9rem;
             color: #e65100;
         }
+        .table-container {
+            overflow-x: auto;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 16px;
+            min-width: 600px;
         }
         th, td {
             padding: 10px;
@@ -74,6 +78,7 @@
             background: #f9f9f9;
             font-weight: 600;
             color: #666;
+            white-space: nowrap;
         }
         input[type="text"],
         input[type="number"] {
@@ -86,6 +91,18 @@
         input:focus {
             outline: none;
             border-color: #8B0000;
+        }
+        .input-code {
+            width: 100px;
+        }
+        .input-name {
+            min-width: 120px;
+        }
+        .input-quantity {
+            width: 70px;
+        }
+        .input-price {
+            width: 90px;
         }
         .btn {
             padding: 10px 20px;
@@ -126,7 +143,7 @@
         }
         .add-form {
             display: grid;
-            grid-template-columns: 1fr 1fr 100px auto;
+            grid-template-columns: 1fr 1fr 80px 100px auto;
             gap: 10px;
             align-items: end;
             margin-top: 16px;
@@ -189,9 +206,16 @@
             width: 100%;
             height: 100%;
         }
+        .price-display {
+            color: #2196F3;
+            font-weight: bold;
+        }
         @media (max-width: 600px) {
             .add-form {
                 grid-template-columns: 1fr;
+            }
+            .input-code, .input-quantity, .input-price {
+                width: 100%;
             }
         }
     </style>
@@ -205,33 +229,41 @@
         <div class="section">
             <h2>現在の商品マスタ</h2>
             <div class="info-box">
-                商品コードは英大文字のみ使用できます。入数は1箱あたりのお守りの個数です。
+                商品コードは英大文字のみ使用できます。入数は1箱あたりのお守りの個数です。<br>
+                <strong>💰 単価（税込）</strong>は発注時の請求金額計算に使用されます。
             </div>
-            <table id="master-table">
-                <thead>
-                    <tr>
-                        <th>商品コード</th>
-                        <th>商品名</th>
-                        <th>入数</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody id="master-tbody">
-                </tbody>
-            </table>
+            <div class="table-container">
+                <table id="master-table">
+                    <thead>
+                        <tr>
+                            <th>商品コード</th>
+                            <th>商品名</th>
+                            <th>入数</th>
+                            <th>単価(税込)</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="master-tbody">
+                    </tbody>
+                </table>
+            </div>
 
             <div class="add-form">
                 <div>
                     <label>商品コード</label>
-                    <input type="text" id="new-code" placeholder="例: OMAMORI">
+                    <input type="text" id="new-code" placeholder="例: OMAMORI" class="input-code">
                 </div>
                 <div>
                     <label>商品名</label>
-                    <input type="text" id="new-name" placeholder="例: 新商品守り">
+                    <input type="text" id="new-name" placeholder="例: 新商品守り" class="input-name">
                 </div>
                 <div>
                     <label>入数</label>
-                    <input type="number" id="new-quantity" placeholder="50" min="1">
+                    <input type="number" id="new-quantity" placeholder="50" min="1" class="input-quantity">
+                </div>
+                <div>
+                    <label>単価(税込)</label>
+                    <input type="number" id="new-price" placeholder="0" min="0" class="input-price">
                 </div>
                 <div>
                     <button class="btn btn-success" onclick="addProduct()">追加</button>
@@ -279,18 +311,18 @@
     <div id="toast" class="toast"></div>
 
     <script>
-        // デフォルトマスタ
+        // デフォルトマスタ（単価を追加）
         const DEFAULT_MASTER = {
-            'HEALTH': { name: '健康守り', quantity: 50 },
-            'MONEY': { name: '金運守り', quantity: 100 },
-            'LOVE': { name: '縁結び守り', quantity: 80 },
-            'TRAFFIC': { name: '交通安全守り', quantity: 60 },
-            'STUDY': { name: '学業成就守り', quantity: 70 },
-            'FAMILY': { name: '家内安全守り', quantity: 50 },
-            'BUSINESS': { name: '商売繁盛守り', quantity: 60 },
-            'CHILD': { name: '子授け守り', quantity: 40 },
-            'RECOVERY': { name: '病気平癒守り', quantity: 50 },
-            'LUCK': { name: '開運守り', quantity: 80 }
+            'HEALTH': { name: '健康守り', quantity: 50, unitPrice: 0 },
+            'MONEY': { name: '金運守り', quantity: 100, unitPrice: 0 },
+            'LOVE': { name: '縁結び守り', quantity: 80, unitPrice: 0 },
+            'TRAFFIC': { name: '交通安全守り', quantity: 60, unitPrice: 0 },
+            'STUDY': { name: '学業成就守り', quantity: 70, unitPrice: 0 },
+            'FAMILY': { name: '家内安全守り', quantity: 50, unitPrice: 0 },
+            'BUSINESS': { name: '商売繁盛守り', quantity: 60, unitPrice: 0 },
+            'CHILD': { name: '子授け守り', quantity: 40, unitPrice: 0 },
+            'RECOVERY': { name: '病気平癒守り', quantity: 50, unitPrice: 0 },
+            'LUCK': { name: '開運守り', quantity: 80, unitPrice: 0 }
         };
 
         let master = {};
@@ -307,6 +339,12 @@
             if (stored) {
                 try {
                     master = JSON.parse(stored);
+                    // 既存データに単価がない場合は追加
+                    Object.keys(master).forEach(code => {
+                        if (master[code].unitPrice === undefined) {
+                            master[code].unitPrice = 0;
+                        }
+                    });
                 } catch (e) {
                     master = { ...DEFAULT_MASTER };
                 }
@@ -322,11 +360,13 @@
 
             Object.keys(master).sort().forEach(code => {
                 const product = master[code];
+                const unitPrice = product.unitPrice || 0;
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td><input type="text" value="${code}" data-original="${code}" onchange="updateCode(this)"></td>
-                    <td><input type="text" value="${product.name}" onchange="updateName('${code}', this.value)"></td>
-                    <td><input type="number" value="${product.quantity}" min="1" onchange="updateQuantity('${code}', this.value)"></td>
+                    <td><input type="text" value="${code}" data-original="${code}" onchange="updateCode(this)" class="input-code"></td>
+                    <td><input type="text" value="${product.name}" onchange="updateName('${code}', this.value)" class="input-name"></td>
+                    <td><input type="number" value="${product.quantity}" min="1" onchange="updateQuantity('${code}', this.value)" class="input-quantity"></td>
+                    <td><input type="number" value="${unitPrice}" min="0" onchange="updatePrice('${code}', this.value)" class="input-price"></td>
                     <td><button class="btn btn-danger btn-small" onclick="deleteProduct('${code}')">削除</button></td>
                 `;
                 tbody.appendChild(row);
@@ -348,6 +388,7 @@
                 master[newCode] = master[oldCode];
                 delete master[oldCode];
                 input.dataset.original = newCode;
+                renderTable(); // 再描画して他のイベントハンドラを更新
                 showToast('商品コードを更新しました', 'success');
             }
         }
@@ -368,11 +409,20 @@
             }
         }
 
+        // 単価更新
+        function updatePrice(code, price) {
+            if (master[code]) {
+                master[code].unitPrice = parseInt(price) || 0;
+                showToast('単価を更新しました', 'success');
+            }
+        }
+
         // 商品追加
         function addProduct() {
             let code = document.getElementById('new-code').value.toUpperCase().replace(/[^A-Z]/g, '');
             const name = document.getElementById('new-name').value.trim();
             const quantity = parseInt(document.getElementById('new-quantity').value) || 50;
+            const unitPrice = parseInt(document.getElementById('new-price').value) || 0;
 
             if (!code) {
                 showToast('商品コードを入力してください', 'error');
@@ -387,13 +437,14 @@
                 return;
             }
 
-            master[code] = { name, quantity };
+            master[code] = { name, quantity, unitPrice };
             renderTable();
 
             // フォームクリア
             document.getElementById('new-code').value = '';
             document.getElementById('new-name').value = '';
             document.getElementById('new-quantity').value = '';
+            document.getElementById('new-price').value = '';
 
             showToast('商品を追加しました', 'success');
         }
@@ -416,7 +467,7 @@
         // JSONエクスポート（ファイルに保存）
         function exportMaster() {
             const exportData = {
-                version: '1.0',
+                version: '2.0',
                 exportDate: new Date().toISOString(),
                 master: master
             };
@@ -452,11 +503,15 @@
                         throw new Error('Empty master');
                     }
 
-                    // 各商品の形式チェック
+                    // 各商品の形式チェックと単価の追加
                     for (const code of keys) {
                         const product = importedMaster[code];
                         if (!product.name || typeof product.quantity !== 'number') {
                             throw new Error('Invalid product format');
+                        }
+                        // 単価がない場合は0を設定
+                        if (product.unitPrice === undefined) {
+                            product.unitPrice = 0;
                         }
                     }
 
@@ -483,7 +538,7 @@
             let js = 'const DEFAULT_MASTER = {\n';
             Object.keys(master).sort().forEach(code => {
                 const p = master[code];
-                js += `    '${code}': { name: '${p.name}', quantity: ${p.quantity} },\n`;
+                js += `    '${code}': { name: '${p.name}', quantity: ${p.quantity}, unitPrice: ${p.unitPrice || 0} },\n`;
             });
             js += '};\n';
             downloadFile(js, 'master_for_appjs.txt', 'text/plain');
