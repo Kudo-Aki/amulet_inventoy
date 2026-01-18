@@ -994,16 +994,20 @@
             
             // APIにも保存
             if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                showToast('🔄 スプレッドシートに保存中...', 'info', false);
                 try {
                     await saveStockDataToApi(stockData);
+                    showToast('✅ 在庫データを保存しました（スプレッドシートに同期済み）', 'success');
                 } catch (e) {
                     console.error('APIへの在庫保存失敗:', e);
+                    showToast('⚠️ 在庫データを保存しました（ローカルのみ）', 'info');
                 }
+            } else {
+                showToast('✅ 在庫データを保存しました', 'success');
             }
             
             checkAlerts();
             updateStats();
-            showToast('在庫データを保存しました', 'success');
         }
 
         // 発注状況保存
@@ -1026,15 +1030,19 @@
             
             // APIにも保存
             if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                showToast('🔄 スプレッドシートに保存中...', 'info', false);
                 try {
                     await saveOrdersDataToApi(orderData);
+                    showToast('✅ 発注状況を保存しました（スプレッドシートに同期済み）', 'success');
                 } catch (e) {
                     console.error('APIへの発注保存失敗:', e);
+                    showToast('⚠️ 発注状況を保存しました（ローカルのみ）', 'info');
                 }
+            } else {
+                showToast('✅ 発注状況を保存しました', 'success');
             }
             
             updateStats();
-            showToast('発注状況を保存しました', 'success');
         }
 
         // データ更新（スプレッドシートから最新データを取得）

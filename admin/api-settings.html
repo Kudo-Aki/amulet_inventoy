@@ -414,19 +414,6 @@
             </ol>
         </div>
 
-        <!-- データ移行 -->
-        <div class="section">
-            <h2>📤 データ移行</h2>
-            <div class="info-box">
-                現在ブラウザに保存されているデータをGoogleスプレッドシートに移行できます。
-            </div>
-            
-            <div class="btn-group">
-                <button class="btn btn-primary" onclick="migrateData()">📤 データを移行</button>
-            </div>
-            
-            <div id="migrate-result" class="hidden" style="margin-top: 16px;"></div>
-        </div>
 
         <a href="index.html" class="back-link">← 管理メニューへ戻る</a>
     </div>
@@ -663,113 +650,6 @@
         
         function onQrCodeError(error) {
             // エラーは無視（スキャン中は常に発生する）
-        }
-        
-        // ========================================
-        // データ移行
-        // ========================================
-        
-        async function migrateData() {
-            if (!isApiEnabled()) {
-                showToast('先にAPI URLを設定してください', 'error');
-                return;
-            }
-            
-            const resultDiv = document.getElementById('migrate-result');
-            resultDiv.className = 'info-box';
-            resultDiv.innerHTML = 'データ移行中...';
-            resultDiv.classList.remove('hidden');
-            
-            try {
-                // ローカルデータを取得
-                let master = null;
-                let stock = {};
-                let orders = {};
-                let history = [];
-                
-                try {
-                    const masterStr = localStorage.getItem('omamori_master');
-                    if (masterStr) master = JSON.parse(masterStr);
-                } catch (e) {
-                    console.warn('マスタデータの読み込みエラー:', e);
-                }
-                
-                try {
-                    const stockStr = localStorage.getItem('omamori_stock');
-                    if (stockStr) stock = JSON.parse(stockStr);
-                } catch (e) {
-                    console.warn('在庫データの読み込みエラー:', e);
-                }
-                
-                try {
-                    const ordersStr = localStorage.getItem('omamori_orders');
-                    if (ordersStr) orders = JSON.parse(ordersStr);
-                } catch (e) {
-                    console.warn('発注データの読み込みエラー:', e);
-                }
-                
-                try {
-                    const historyStr = localStorage.getItem('omamori_stock_history');
-                    if (historyStr) history = JSON.parse(historyStr);
-                } catch (e) {
-                    console.warn('履歴データの読み込みエラー:', e);
-                }
-                
-                // データがあるか確認
-                const hasMaster = master && Object.keys(master).length > 0;
-                const hasStock = stock && Object.keys(stock).length > 0;
-                const hasOrders = orders && Object.keys(orders).length > 0;
-                const hasHistory = history && history.length > 0;
-                
-                if (!hasMaster && !hasStock && !hasOrders && !hasHistory) {
-                    resultDiv.className = 'warning-box';
-                    resultDiv.innerHTML = '⚠️ 移行するデータがありません<br>ブラウザにlocalStorageデータが保存されていません。';
-                    return;
-                }
-                
-                // APIに送信
-                const config = getApiConfig();
-                console.log('移行データ:', { master, stock, orders, historyCount: history.length });
-                
-                const response = await fetch(config.url, {
-                    method: 'POST',
-                    mode: 'cors',
-                    headers: {
-                        'Content-Type': 'text/plain'
-                    },
-                    body: JSON.stringify({
-                        action: 'migrate',
-                        master: master || {},
-                        stock: stock || {},
-                        orders: orders || {},
-                        history: history || []
-                    })
-                });
-                
-                if (!response.ok) {
-                    throw new Error('HTTPエラー: ' + response.status);
-                }
-                
-                const result = await response.json();
-                console.log('移行結果:', result);
-                
-                if (result.success) {
-                    resultDiv.className = 'success-box';
-                    let message = '✅ データ移行が完了しました';
-                    if (result.counts) {
-                        message += `<br>商品: ${result.counts.products || result.counts.master || 0}件`;
-                        message += `<br>履歴: ${result.counts.history || 0}件`;
-                    }
-                    resultDiv.innerHTML = message;
-                } else {
-                    resultDiv.className = 'error-box';
-                    resultDiv.innerHTML = `❌ 移行失敗<br>${result.error || '不明なエラー'}`;
-                }
-            } catch (e) {
-                console.error('移行エラー:', e);
-                resultDiv.className = 'error-box';
-                resultDiv.innerHTML = `❌ 移行失敗<br>${e.message}<br><br>ブラウザのコンソール（F12）で詳細を確認してください。`;
-            }
         }
         
         // ========================================

@@ -143,7 +143,7 @@
         }
         .add-form {
             display: grid;
-            grid-template-columns: 1fr 1fr 80px 100px auto;
+            grid-template-columns: 1fr 1fr 80px 100px 80px 80px auto;
             gap: 10px;
             align-items: end;
             margin-top: 16px;
@@ -192,19 +192,6 @@
         }
         .back-link:hover {
             text-decoration: underline;
-        }
-        .file-input-wrapper {
-            position: relative;
-            display: inline-block;
-        }
-        .file-input-wrapper input[type="file"] {
-            position: absolute;
-            left: 0;
-            top: 0;
-            opacity: 0;
-            cursor: pointer;
-            width: 100%;
-            height: 100%;
         }
         .price-display {
             color: #2196F3;
@@ -266,42 +253,29 @@
                     <input type="number" id="new-price" placeholder="0" min="0" class="input-price">
                 </div>
                 <div>
+                    <label>現在庫</label>
+                    <input type="number" id="new-stock" placeholder="0" min="0" class="input-stock">
+                </div>
+                <div>
+                    <label>安心在庫</label>
+                    <input type="number" id="new-safe-stock" placeholder="10" min="0" class="input-safe-stock">
+                </div>
+                <div>
                     <button class="btn btn-success" onclick="addProduct()">追加</button>
                 </div>
             </div>
         </div>
 
         <div class="section">
-            <h2>マスタの保存・共有</h2>
-            <div class="warning-box">
-                ⚠️ ブラウザのキャッシュをクリアするとマスタが消えます。<br>
-                必ず「ファイルに保存」でバックアップを取ってください。
+            <h2>マスタの保存</h2>
+            <div class="info-box">
+                ✅ マスタはスプレッドシートに保存されます。<br>
+                全ての端末で同じデータが共有されます。
             </div>
             
             <div class="action-group">
-                <h3>📱 スマホ間でマスタを共有する</h3>
-                <button class="btn btn-info" onclick="exportMaster()">📤 ファイルに保存</button>
-                <div class="file-input-wrapper">
-                    <button class="btn btn-info">📥 ファイルから読み込み</button>
-                    <input type="file" id="import-file" accept=".json" onchange="importMaster(event)">
-                </div>
-                <p style="font-size: 0.85rem; color: #666; margin-top: 8px;">
-                    保存したファイルはLINE・AirDrop・メールで他のスマホに送れます
-                </p>
-            </div>
-
-            <div class="action-group">
-                <h3>💾 このスマホに保存</h3>
-                <button class="btn btn-primary" onclick="saveMaster()">ブラウザに保存</button>
-                <button class="btn btn-danger" onclick="resetMaster()">🔄 初期状態に戻す</button>
-            </div>
-
-            <div class="action-group">
-                <h3>🔧 開発者向け</h3>
-                <button class="btn btn-secondary" onclick="exportMasterAsJS()">📤 app.js用コード出力</button>
-                <p style="font-size: 0.85rem; color: #666; margin-top: 8px;">
-                    GitHub Pagesのデフォルトマスタを変更する場合に使用
-                </p>
+                <h3>💾 保存</h3>
+                <button class="btn btn-primary" onclick="saveMaster()">📤 スプレッドシートに保存</button>
             </div>
         </div>
 
@@ -437,11 +411,13 @@
         }
 
         // 商品追加
-        function addProduct() {
+        async function addProduct() {
             let code = document.getElementById('new-code').value.toUpperCase().replace(/[^A-Z]/g, '');
             const name = document.getElementById('new-name').value.trim();
             const quantity = parseInt(document.getElementById('new-quantity').value) || 50;
             const unitPrice = parseInt(document.getElementById('new-price').value) || 0;
+            const stock = parseInt(document.getElementById('new-stock').value) || 0;
+            const safeStock = parseInt(document.getElementById('new-safe-stock').value) || 10;
 
             if (!code) {
                 showToast('商品コードを入力してください', 'error');
@@ -456,7 +432,48 @@
                 return;
             }
 
+            // マスタに追加
             master[code] = { name, quantity, unitPrice };
+            
+            // ローカルに保存
+            localStorage.setItem('omamori_master', JSON.stringify(master));
+            
+            // 在庫データも保存
+            let stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
+            stockData[code] = { stock: stock, safeStock: safeStock };
+            localStorage.setItem('omamori_stock', JSON.stringify(stockData));
+            
+            // 発注データも初期化
+            let orderData = JSON.parse(localStorage.getItem('omamori_orders') || '{}');
+            orderData[code] = { ordered: false, quantity: 0, deliveryDate: '' };
+            localStorage.setItem('omamori_orders', JSON.stringify(orderData));
+            
+            // APIが有効ならスプレッドシートにも即座に保存
+            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                showToast('🔄 スプレッドシートに保存中...', 'info');
+                try {
+                    // 商品データをスプレッドシートに保存
+                    const productData = {
+                        code: code,
+                        name: name,
+                        quantity: quantity,
+                        unitPrice: unitPrice,
+                        stock: stock,
+                        safeStock: safeStock,
+                        ordered: false,
+                        orderQuantity: 0,
+                        deliveryDate: ''
+                    };
+                    await saveProductToSpreadsheet(productData);
+                    showToast('✅ 商品を追加しました（スプレッドシートに保存済み）', 'success');
+                } catch (e) {
+                    console.error('スプレッドシート保存エラー:', e);
+                    showToast('⚠️ 商品を追加しました（ローカルのみ）', 'info');
+                }
+            } else {
+                showToast('✅ 商品を追加しました', 'success');
+            }
+            
             renderTable();
 
             // フォームクリア
@@ -464,8 +481,29 @@
             document.getElementById('new-name').value = '';
             document.getElementById('new-quantity').value = '';
             document.getElementById('new-price').value = '';
-
-            showToast('商品を追加しました', 'success');
+            document.getElementById('new-stock').value = '';
+            document.getElementById('new-safe-stock').value = '';
+        }
+        
+        // 商品をスプレッドシートに保存
+        async function saveProductToSpreadsheet(productData) {
+            const apiUrl = localStorage.getItem('omamori_api_url');
+            if (!apiUrl) throw new Error('API URLが設定されていません');
+            
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({
+                    action: 'saveProduct',
+                    data: productData
+                })
+            });
+            
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.error || '保存に失敗しました');
+            }
+            return result;
         }
 
         // 商品削除
@@ -491,109 +529,6 @@
             }
             
             showToast('マスタを保存しました', 'success');
-        }
-
-        // JSONエクスポート（ファイルに保存）
-        function exportMaster() {
-            const exportData = {
-                version: '2.0',
-                exportDate: new Date().toISOString(),
-                master: master
-            };
-            const json = JSON.stringify(exportData, null, 2);
-            const filename = `omamori_master_${new Date().toISOString().slice(0,10)}.json`;
-            downloadFile(json, filename, 'application/json');
-            showToast('マスタファイルを保存しました', 'success');
-        }
-
-        // JSONインポート（ファイルから読み込み）
-        function importMaster(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    
-                    // 新形式（version付き）と旧形式の両方に対応
-                    let importedMaster;
-                    if (data.master && typeof data.master === 'object') {
-                        importedMaster = data.master;
-                    } else if (typeof data === 'object' && !data.version) {
-                        importedMaster = data;
-                    } else {
-                        throw new Error('Invalid format');
-                    }
-
-                    // 形式チェック
-                    const keys = Object.keys(importedMaster);
-                    if (keys.length === 0) {
-                        throw new Error('Empty master');
-                    }
-
-                    // 各商品の形式チェックと単価の追加
-                    for (const code of keys) {
-                        const product = importedMaster[code];
-                        if (!product.name || typeof product.quantity !== 'number') {
-                            throw new Error('Invalid product format');
-                        }
-                        // 単価がない場合は0を設定
-                        if (product.unitPrice === undefined) {
-                            product.unitPrice = 0;
-                        }
-                    }
-
-                    // 確認ダイアログ
-                    if (confirm(`${keys.length}件の商品データを読み込みます。\n現在のマスタは上書きされます。よろしいですか？`)) {
-                        master = importedMaster;
-                        renderTable();
-                        saveMaster(); // 自動保存
-                        showToast(`${keys.length}件の商品を読み込みました`, 'success');
-                    }
-                } catch (error) {
-                    showToast('ファイルの形式が正しくありません', 'error');
-                    console.error('Import error:', error);
-                }
-            };
-            reader.readAsText(file);
-            
-            // 同じファイルを再度選択できるようにリセット
-            event.target.value = '';
-        }
-
-        // app.js用エクスポート
-        function exportMasterAsJS() {
-            let js = 'const DEFAULT_MASTER = {\n';
-            Object.keys(master).sort().forEach(code => {
-                const p = master[code];
-                js += `    '${code}': { name: '${p.name}', quantity: ${p.quantity}, unitPrice: ${p.unitPrice || 0} },\n`;
-            });
-            js += '};\n';
-            downloadFile(js, 'master_for_appjs.txt', 'text/plain');
-            showToast('app.js用コードを出力しました', 'success');
-        }
-
-        // 初期状態に戻す
-        function resetMaster() {
-            if (confirm('マスタを初期状態に戻しますか？\n追加した商品は削除されます。')) {
-                master = { ...DEFAULT_MASTER };
-                renderTable();
-                showToast('初期状態に戻しました', 'success');
-            }
-        }
-
-        // ファイルダウンロード
-        function downloadFile(content, filename, mimeType) {
-            const blob = new Blob([content], { type: mimeType });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
         }
 
         // トースト表示
