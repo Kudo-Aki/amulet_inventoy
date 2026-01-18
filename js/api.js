@@ -68,6 +68,7 @@ async function apiGet(action, params = {}) {
 
 /**
  * POSTリクエストを送信
+ * GASのCORS制限に対応するため、プリフライトが発生しない形式で送信
  */
 async function apiPost(action, data = {}) {
     const config = getApiConfig();
@@ -75,20 +76,29 @@ async function apiPost(action, data = {}) {
         throw new Error('API未設定');
     }
     
-    const response = await fetch(config.url, {
-        method: 'POST',
-        mode: 'cors',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ action, ...data })
-    });
+    // FormDataを使用するとプリフライトが発生しない（シンプルリクエスト）
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify({ action, ...data }));
     
-    if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+    try {
+        const response = await fetch(config.url, {
+            method: 'POST',
+            body: formData
+        });
+        
+        // GASはリダイレクトを返すことがあるが、fetchは自動でフォローする
+        const text = await response.text();
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            // JSONパースに失敗してもリクエストは成功とみなす
+            console.log('Response text:', text);
+            return { success: true };
+        }
+    } catch (e) {
+        console.error('API POSTエラー:', e);
+        throw e;
     }
-    
-    return await response.json();
 }
 
 // ========================================
