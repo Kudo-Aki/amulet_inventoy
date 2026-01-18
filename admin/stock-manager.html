@@ -556,25 +556,108 @@
 
         // 初期化
         document.addEventListener('DOMContentLoaded', async function() {
-            // ローディング表示（消えないモード）
-            showToast('🔄 データを読み込み中...', 'info', true);
+            // まずローカルデータを先に表示（瞬時）
+            loadLocalDataFirst();
             
-            try {
-                await loadMaster();
-                await loadStock();
-                await loadOrders();
-                renderStockTable();
-                renderOrderTable();
-                await loadHistory();
-                checkAlerts();
-                updateStats();
-                // 読み込み完了後にメッセージを更新（自動で消える）
-                showToast('✅ 最新データを読み込みました', 'success');
-            } catch (e) {
-                console.error('初期化エラー:', e);
-                showToast('❌ データの読み込みに失敗しました', 'error');
+            // APIが有効ならスプレッドシートから最新データを取得
+            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                showToast('🔄 最新データを取得中...', 'info', true);
+                
+                try {
+                    await loadMaster();
+                    await loadStock();
+                    await loadOrders();
+                    await loadHistory();
+                    renderStockTable();
+                    renderOrderTable();
+                    checkAlerts();
+                    updateStats();
+                    showToast('✅ 最新データを読み込みました', 'success');
+                } catch (e) {
+                    console.error('API読み込みエラー:', e);
+                    showToast('⚠️ ローカルデータを表示中', 'info');
+                }
+            } else {
+                showToast('ℹ️ ローカルデータを表示中', 'info');
             }
         });
+        
+        // ローカルデータを先に読み込んで表示
+        function loadLocalDataFirst() {
+            // ローカルストレージからデータを取得
+            const savedMaster = localStorage.getItem('omamori_master');
+            if (savedMaster) {
+                try {
+                    master = JSON.parse(savedMaster);
+                } catch (e) {
+                    master = {};
+                }
+            }
+            
+            const savedStock = localStorage.getItem('omamori_stock');
+            if (savedStock) {
+                try {
+                    stockData = JSON.parse(savedStock);
+                } catch (e) {
+                    stockData = {};
+                }
+            }
+            
+            const savedOrders = localStorage.getItem('omamori_orders');
+            if (savedOrders) {
+                try {
+                    orderData = JSON.parse(savedOrders);
+                } catch (e) {
+                    orderData = {};
+                }
+            }
+            
+            // ローカルデータで先に描画
+            renderStockTable();
+            renderOrderTable();
+            loadHistoryLocal();
+            checkAlerts();
+            updateStats();
+        }
+        
+        // ローカル履歴読み込み
+        function loadHistoryLocal() {
+            const savedHistory = localStorage.getItem('omamori_stock_history');
+            if (savedHistory) {
+                try {
+                    const history = JSON.parse(savedHistory);
+                    renderHistoryTable(history);
+                } catch (e) {
+                    renderHistoryTable([]);
+                }
+            } else {
+                renderHistoryTable([]);
+            }
+        }
+        
+        // 履歴テーブル描画
+        function renderHistoryTable(history) {
+            const tbody = document.getElementById('history-tbody');
+            tbody.innerHTML = '';
+            
+            if (!history || history.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">履歴がありません</td></tr>';
+                return;
+            }
+            
+            history.slice().reverse().forEach(item => {
+                const row = document.createElement('tr');
+                const typeClass = item.type === '入庫' ? 'type-in' : 'type-out';
+                row.innerHTML = `
+                    <td>${item.date}</td>
+                    <td><span class="${typeClass}">${item.type}</span></td>
+                    <td>${item.productName || item.productCode}</td>
+                    <td>${item.quantity}</td>
+                    <td>${item.note || '-'}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
 
         // タブ切り替え
         function switchTab(tabName) {
@@ -1082,10 +1165,15 @@
                 history = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
             }
             
+            renderHistoryTableFromApi(history);
+        }
+        
+        // APIからの履歴テーブル描画
+        function renderHistoryTableFromApi(history) {
             const tbody = document.getElementById('history-tbody');
             tbody.innerHTML = '';
 
-            if (history.length === 0) {
+            if (!history || history.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">履歴がありません</td></tr>';
                 return;
             }
