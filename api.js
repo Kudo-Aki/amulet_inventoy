@@ -68,7 +68,7 @@ async function apiGet(action, params = {}) {
 
 /**
  * POSTリクエストを送信
- * GASのCORS制限とリダイレクトに対応
+ * GASのCORS制限に対応するため、プリフライトが発生しない形式で送信
  */
 async function apiPost(action, data = {}) {
     const config = getApiConfig();
@@ -76,23 +76,25 @@ async function apiPost(action, data = {}) {
         throw new Error('API未設定');
     }
     
-    // GASはPOSTリクエストでリダイレクトを返すことがある
-    // redirect: 'follow'とmode: 'cors'ではCORSエラーになるため
-    // no-corsモードを使用し、レスポンスは空になるがリクエストは送信される
+    // FormDataを使用するとプリフライトが発生しない（シンプルリクエスト）
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify({ action, ...data }));
+    
     try {
         const response = await fetch(config.url, {
             method: 'POST',
-            mode: 'no-cors',
-            headers: {
-                'Content-Type': 'text/plain'
-            },
-            body: JSON.stringify({ action, ...data })
+            body: formData
         });
         
-        // no-corsモードではresponse.typeが'opaque'になり、
-        // レスポンスボディは読めないが、リクエストは正常に送信される
-        // GAS側では正常に処理される
-        return { success: true };
+        // GASはリダイレクトを返すことがあるが、fetchは自動でフォローする
+        const text = await response.text();
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            // JSONパースに失敗してもリクエストは成功とみなす
+            console.log('Response text:', text);
+            return { success: true };
+        }
     } catch (e) {
         console.error('API POSTエラー:', e);
         throw e;
