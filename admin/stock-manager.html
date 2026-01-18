@@ -428,7 +428,7 @@
                 </div>
                 <div class="button-row">
                     <button class="btn btn-primary" onclick="saveStock()">💾 保存</button>
-                    <button class="btn btn-secondary" onclick="resetStock()">🔄 リセット</button>
+                    <button class="btn btn-secondary" onclick="refreshData()">🔄 更新</button>
                 </div>
             </div>
         </div>
@@ -523,14 +523,23 @@
 
         // 初期化
         document.addEventListener('DOMContentLoaded', async function() {
-            await loadMaster();
-            await loadStock();
-            await loadOrders();
-            renderStockTable();
-            renderOrderTable();
-            await loadHistory();
-            checkAlerts();
-            updateStats();
+            // ローディング表示
+            showToast('データを読み込み中...', 'info');
+            
+            try {
+                await loadMaster();
+                await loadStock();
+                await loadOrders();
+                renderStockTable();
+                renderOrderTable();
+                await loadHistory();
+                checkAlerts();
+                updateStats();
+                showToast('最新データを読み込みました', 'success');
+            } catch (e) {
+                console.error('初期化エラー:', e);
+                showToast('データの読み込みに失敗しました', 'error');
+            }
         });
 
         // タブ切り替え
@@ -879,25 +888,24 @@
             showToast('発注状況を保存しました', 'success');
         }
 
-        // 在庫リセット
-        function resetStock() {
-            if (!confirm('すべての在庫データをリセットしますか？')) {
-                return;
+        // データ更新（スプレッドシートから最新データを取得）
+        async function refreshData() {
+            showToast('データを更新中...', 'info');
+            
+            try {
+                await loadMaster();
+                await loadStock();
+                await loadOrders();
+                renderStockTable();
+                renderOrderTable();
+                await loadHistory();
+                checkAlerts();
+                updateStats();
+                showToast('データを更新しました', 'success');
+            } catch (e) {
+                console.error('更新エラー:', e);
+                showToast('更新に失敗しました', 'error');
             }
-
-            stockData = {};
-            Object.keys(master).forEach(code => {
-                stockData[code] = {
-                    stock: 0,
-                    safeStock: 10
-                };
-            });
-
-            localStorage.setItem('omamori_stock', JSON.stringify(stockData));
-            renderStockTable();
-            checkAlerts();
-            updateStats();
-            showToast('在庫データをリセットしました', 'success');
         }
 
         // 発注状況クリア

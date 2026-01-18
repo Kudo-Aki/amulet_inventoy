@@ -677,40 +677,81 @@
             
             const resultDiv = document.getElementById('migrate-result');
             resultDiv.className = 'info-box';
-            resultDiv.innerHTML = '<span class="loading"></span> データ移行中...';
+            resultDiv.innerHTML = 'データ移行中...';
             resultDiv.classList.remove('hidden');
             
             try {
                 // ローカルデータを取得
-                const master = JSON.parse(localStorage.getItem('omamori_master') || 'null');
-                const stock = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
-                const orders = JSON.parse(localStorage.getItem('omamori_orders') || '{}');
-                const history = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
+                let master = null;
+                let stock = {};
+                let orders = {};
+                let history = [];
                 
-                if (!master && Object.keys(stock).length === 0 && Object.keys(orders).length === 0 && history.length === 0) {
+                try {
+                    const masterStr = localStorage.getItem('omamori_master');
+                    if (masterStr) master = JSON.parse(masterStr);
+                } catch (e) {
+                    console.warn('マスタデータの読み込みエラー:', e);
+                }
+                
+                try {
+                    const stockStr = localStorage.getItem('omamori_stock');
+                    if (stockStr) stock = JSON.parse(stockStr);
+                } catch (e) {
+                    console.warn('在庫データの読み込みエラー:', e);
+                }
+                
+                try {
+                    const ordersStr = localStorage.getItem('omamori_orders');
+                    if (ordersStr) orders = JSON.parse(ordersStr);
+                } catch (e) {
+                    console.warn('発注データの読み込みエラー:', e);
+                }
+                
+                try {
+                    const historyStr = localStorage.getItem('omamori_stock_history');
+                    if (historyStr) history = JSON.parse(historyStr);
+                } catch (e) {
+                    console.warn('履歴データの読み込みエラー:', e);
+                }
+                
+                // データがあるか確認
+                const hasMaster = master && Object.keys(master).length > 0;
+                const hasStock = stock && Object.keys(stock).length > 0;
+                const hasOrders = orders && Object.keys(orders).length > 0;
+                const hasHistory = history && history.length > 0;
+                
+                if (!hasMaster && !hasStock && !hasOrders && !hasHistory) {
                     resultDiv.className = 'warning-box';
-                    resultDiv.innerHTML = '⚠️ 移行するデータがありません';
+                    resultDiv.innerHTML = '⚠️ 移行するデータがありません<br>ブラウザにlocalStorageデータが保存されていません。';
                     return;
                 }
                 
                 // APIに送信
                 const config = getApiConfig();
+                console.log('移行データ:', { master, stock, orders, historyCount: history.length });
+                
                 const response = await fetch(config.url, {
                     method: 'POST',
                     mode: 'cors',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'text/plain'
                     },
                     body: JSON.stringify({
                         action: 'migrate',
-                        master: master,
-                        stock: stock,
-                        orders: orders,
-                        history: history
+                        master: master || {},
+                        stock: stock || {},
+                        orders: orders || {},
+                        history: history || []
                     })
                 });
                 
+                if (!response.ok) {
+                    throw new Error('HTTPエラー: ' + response.status);
+                }
+                
                 const result = await response.json();
+                console.log('移行結果:', result);
                 
                 if (result.success) {
                     resultDiv.className = 'success-box';
@@ -725,8 +766,9 @@
                     resultDiv.innerHTML = `❌ 移行失敗<br>${result.error || '不明なエラー'}`;
                 }
             } catch (e) {
+                console.error('移行エラー:', e);
                 resultDiv.className = 'error-box';
-                resultDiv.innerHTML = `❌ 移行失敗<br>${e.message}`;
+                resultDiv.innerHTML = `❌ 移行失敗<br>${e.message}<br><br>ブラウザのコンソール（F12）で詳細を確認してください。`;
             }
         }
         
