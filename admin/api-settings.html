@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>API設定 - お守り在庫管理</title>
+    <script src="https://unpkg.com/html5-qrcode@2.3.4/html5-qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -139,6 +141,13 @@
         .btn-danger:hover {
             background: #d32f2f;
         }
+        .btn-info {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-info:hover {
+            background: #1976D2;
+        }
         .btn-group {
             display: flex;
             gap: 10px;
@@ -221,33 +230,63 @@
             justify-content: center;
             font-weight: bold;
         }
-        .code-block {
-            background: #f5f5f5;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 12px;
-            font-family: monospace;
-            font-size: 12px;
-            overflow-x: auto;
-            margin: 8px 0;
-            word-break: break-all;
-        }
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #8B0000;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 8px;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
         .hidden {
             display: none !important;
+        }
+        #qr-code-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            margin-top: 16px;
+        }
+        #qr-code-container canvas {
+            margin-bottom: 16px;
+        }
+        #qr-reader {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        #qr-reader video {
+            border-radius: 8px;
+        }
+        .qr-section {
+            text-align: center;
+        }
+        .qr-instruction {
+            margin-top: 12px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+        .tab-container {
+            display: flex;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 16px;
+        }
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1rem;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+        .tab.active {
+            color: #8B0000;
+            border-bottom-color: #8B0000;
+            font-weight: 600;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
         }
     </style>
 </head>
@@ -270,19 +309,66 @@
         <!-- API URL設定 -->
         <div class="section">
             <h2>🔗 API URL設定</h2>
-            <div class="info-box">
-                Google Apps Script（GAS）をデプロイして取得したWebアプリURLを入力してください。
+            
+            <div class="tab-container">
+                <button class="tab active" onclick="switchTab('manual')">📝 手動入力</button>
+                <button class="tab" onclick="switchTab('qr-scan')">📷 QRスキャン</button>
+                <button class="tab" onclick="switchTab('qr-generate')">🔲 QR生成</button>
             </div>
             
-            <div class="form-group">
-                <label for="api-url">API URL</label>
-                <input type="url" id="api-url" placeholder="https://script.google.com/macros/s/xxxxx/exec">
+            <!-- 手動入力タブ -->
+            <div id="tab-manual" class="tab-content active">
+                <div class="info-box">
+                    Google Apps Script（GAS）をデプロイして取得したWebアプリURLを入力してください。
+                </div>
+                
+                <div class="form-group">
+                    <label for="api-url">API URL</label>
+                    <input type="url" id="api-url" placeholder="https://script.google.com/macros/s/xxxxx/exec">
+                </div>
+                
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="saveApiUrl()">💾 保存</button>
+                    <button class="btn btn-success" onclick="testConnection()">🔍 接続テスト</button>
+                    <button class="btn btn-danger" onclick="clearApiUrl()">🗑️ 削除</button>
+                </div>
             </div>
             
-            <div class="btn-group">
-                <button class="btn btn-primary" onclick="saveApiUrl()">💾 保存</button>
-                <button class="btn btn-success" onclick="testConnection()">🔍 接続テスト</button>
-                <button class="btn btn-danger" onclick="clearApiUrl()">🗑️ 削除</button>
+            <!-- QRスキャンタブ -->
+            <div id="tab-qr-scan" class="tab-content">
+                <div class="info-box">
+                    PCで生成したAPI URLのQRコードをスキャンして、簡単に設定できます。
+                </div>
+                
+                <div class="qr-section">
+                    <div id="qr-reader"></div>
+                    <div class="btn-group" style="justify-content: center; margin-top: 16px;">
+                        <button class="btn btn-info" onclick="startQrScanner()">📷 カメラを起動</button>
+                        <button class="btn btn-secondary" onclick="stopQrScanner()">⏹️ 停止</button>
+                    </div>
+                    <p class="qr-instruction">QRコードをカメラに映してください</p>
+                </div>
+            </div>
+            
+            <!-- QR生成タブ -->
+            <div id="tab-qr-generate" class="tab-content">
+                <div class="info-box">
+                    現在設定されているAPI URLのQRコードを生成します。<br>
+                    他のスマートフォンでこのQRコードをスキャンすると、同じ設定を簡単に共有できます。
+                </div>
+                
+                <div class="qr-section">
+                    <div id="qr-code-container" class="hidden">
+                        <div id="qr-code"></div>
+                        <p class="qr-instruction">このQRコードを他のスマートフォンでスキャンしてください</p>
+                    </div>
+                    <div id="qr-no-url" class="warning-box">
+                        API URLが設定されていません。先にURLを設定してください。
+                    </div>
+                    <div class="btn-group" style="justify-content: center; margin-top: 16px;">
+                        <button class="btn btn-primary" onclick="generateQrCode()">🔲 QRコードを生成</button>
+                    </div>
+                </div>
             </div>
             
             <div id="test-result" class="hidden" style="margin-top: 16px;"></div>
@@ -321,6 +407,10 @@
                     <strong>接続テスト</strong><br>
                     「接続テスト」ボタンをクリックして正常に接続できることを確認
                 </li>
+                <li>
+                    <strong>他のスマホへ共有（任意）</strong><br>
+                    「QR生成」タブでQRコードを生成し、他のスマホで「QRスキャン」から読み取り
+                </li>
             </ol>
         </div>
 
@@ -338,184 +428,317 @@
             <div id="migrate-result" class="hidden" style="margin-top: 16px;"></div>
         </div>
 
-        <a href="index.html" class="back-link">← 管理メニューに戻る</a>
+        <a href="index.html" class="back-link">← 管理メニューへ戻る</a>
     </div>
 
     <div id="toast" class="toast"></div>
 
     <script src="../js/api.js"></script>
     <script>
+        // ========================================
         // 初期化
-        document.addEventListener('DOMContentLoaded', () => {
-            loadApiUrl();
-            updateStatus();
+        // ========================================
+        
+        let html5QrCode = null;
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCurrentSettings();
+            checkConnectionStatus();
         });
-
-        // API URL読み込み
-        function loadApiUrl() {
-            const url = localStorage.getItem('omamori_api_url') || '';
-            document.getElementById('api-url').value = url;
+        
+        // ========================================
+        // タブ切り替え
+        // ========================================
+        
+        function switchTab(tabName) {
+            // タブボタンの状態を更新
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // タブコンテンツの表示を切り替え
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById('tab-' + tabName).classList.add('active');
+            
+            // QRスキャナーを停止
+            if (tabName !== 'qr-scan') {
+                stopQrScanner();
+            }
         }
-
-        // API URL保存
+        
+        // ========================================
+        // 設定の読み込み・保存
+        // ========================================
+        
+        function loadCurrentSettings() {
+            const config = getApiConfig();
+            document.getElementById('api-url').value = config.url || '';
+        }
+        
         function saveApiUrl() {
             const url = document.getElementById('api-url').value.trim();
             
-            if (url && !url.startsWith('https://script.google.com/')) {
+            if (!url) {
+                showToast('URLを入力してください', 'error');
+                return;
+            }
+            
+            if (!url.startsWith('https://script.google.com/')) {
                 showToast('有効なGoogle Apps Script URLを入力してください', 'error');
                 return;
             }
             
-            localStorage.setItem('omamori_api_url', url);
-            updateStatus();
+            saveApiConfig(url, true);
             showToast('API URLを保存しました', 'success');
+            checkConnectionStatus();
         }
-
-        // API URL削除
+        
         function clearApiUrl() {
-            if (!confirm('API URLを削除しますか？\nスプレッドシートとの連携が解除されます。')) {
+            if (!confirm('API設定を削除しますか？\nデータはスプレッドシートに残りますが、このアプリからは接続できなくなります。')) {
                 return;
             }
             
-            localStorage.removeItem('omamori_api_url');
+            saveApiConfig('', false);
             document.getElementById('api-url').value = '';
-            updateStatus();
-            showToast('API URLを削除しました', 'success');
+            showToast('API設定を削除しました', 'success');
+            checkConnectionStatus();
         }
-
-        // 状態更新
-        function updateStatus() {
-            const url = localStorage.getItem('omamori_api_url');
+        
+        // ========================================
+        // 接続テスト
+        // ========================================
+        
+        async function testConnection() {
+            const url = document.getElementById('api-url').value.trim();
+            
+            if (!url) {
+                showToast('URLを入力してください', 'error');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('test-result');
+            resultDiv.className = 'info-box';
+            resultDiv.innerHTML = '<span class="loading"></span> 接続テスト中...';
+            resultDiv.classList.remove('hidden');
+            
+            try {
+                const testUrl = new URL(url);
+                testUrl.searchParams.append('action', 'test');
+                
+                const response = await fetch(testUrl.toString(), {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    resultDiv.className = 'success-box';
+                    resultDiv.innerHTML = `✅ 接続成功<br>スプレッドシート: ${result.spreadsheetName || '不明'}`;
+                    
+                    // 成功したらURLを保存
+                    saveApiConfig(url, true);
+                    checkConnectionStatus();
+                } else {
+                    resultDiv.className = 'error-box';
+                    resultDiv.innerHTML = `❌ 接続失敗<br>${result.error || '不明なエラー'}`;
+                }
+            } catch (e) {
+                resultDiv.className = 'error-box';
+                resultDiv.innerHTML = `❌ 接続失敗<br>${e.message}`;
+            }
+        }
+        
+        function checkConnectionStatus() {
+            const config = getApiConfig();
             const indicator = document.getElementById('status-indicator');
             const icon = document.getElementById('status-icon');
             const text = document.getElementById('status-text');
             const detail = document.getElementById('status-detail');
             
-            if (url) {
+            if (config.enabled && config.url) {
                 indicator.className = 'status-indicator status-connected';
                 icon.textContent = '✅';
-                text.textContent = '設定済み';
-                detail.textContent = 'API URLが設定されています。接続テストで動作を確認してください。';
+                text.textContent = '接続済み';
+                detail.textContent = 'Googleスプレッドシートと連携しています。';
+                
+                // QR生成タブの表示を更新
+                document.getElementById('qr-no-url').classList.add('hidden');
             } else {
                 indicator.className = 'status-indicator status-disconnected';
                 icon.textContent = '❌';
                 text.textContent = '未接続';
                 detail.textContent = 'Googleスプレッドシートとの連携が設定されていません。';
+                
+                // QR生成タブの表示を更新
+                document.getElementById('qr-no-url').classList.remove('hidden');
+                document.getElementById('qr-code-container').classList.add('hidden');
             }
         }
-
-        // 接続テスト
-        async function testConnection() {
-            const url = document.getElementById('api-url').value.trim();
-            const resultDiv = document.getElementById('test-result');
+        
+        // ========================================
+        // QRコード生成
+        // ========================================
+        
+        function generateQrCode() {
+            const config = getApiConfig();
             
-            if (!url) {
-                showToast('API URLを入力してください', 'error');
+            if (!config.url) {
+                showToast('API URLが設定されていません', 'error');
                 return;
             }
             
-            resultDiv.className = 'info-box';
-            resultDiv.innerHTML = '<span class="loading"></span>接続テスト中...';
-            resultDiv.classList.remove('hidden');
+            // 既存のQRコードをクリア
+            const qrContainer = document.getElementById('qr-code');
+            qrContainer.innerHTML = '';
             
-            try {
-                const response = await fetch(url + '?action=test', {
-                    method: 'GET',
-                    mode: 'cors'
+            // QRコードを生成
+            new QRCode(qrContainer, {
+                text: config.url,
+                width: 256,
+                height: 256,
+                colorDark: '#8B0000',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.M
+            });
+            
+            document.getElementById('qr-code-container').classList.remove('hidden');
+            document.getElementById('qr-no-url').classList.add('hidden');
+            
+            showToast('QRコードを生成しました', 'success');
+        }
+        
+        // ========================================
+        // QRコードスキャン
+        // ========================================
+        
+        function startQrScanner() {
+            if (html5QrCode && html5QrCode.isScanning) {
+                return;
+            }
+            
+            html5QrCode = new Html5Qrcode("qr-reader");
+            
+            html5QrCode.start(
+                { facingMode: "environment" },
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 }
+                },
+                onQrCodeSuccess,
+                onQrCodeError
+            ).catch(err => {
+                showToast('カメラの起動に失敗しました: ' + err, 'error');
+            });
+        }
+        
+        function stopQrScanner() {
+            if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().catch(err => {
+                    console.error('QRスキャナー停止エラー:', err);
                 });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    resultDiv.className = 'success-box';
-                    resultDiv.innerHTML = `
-                        ✅ <strong>接続成功！</strong><br>
-                        スプレッドシート名: ${data.spreadsheetName || '不明'}<br>
-                        スプレッドシートID: ${data.spreadsheetId || '不明'}
-                    `;
-                    showToast('接続テスト成功！', 'success');
-                } else {
-                    throw new Error(data.error || '接続に失敗しました');
-                }
-            } catch (error) {
-                resultDiv.className = 'error-box';
-                resultDiv.innerHTML = `❌ <strong>接続失敗</strong><br>${error.message}`;
-                showToast('接続テストに失敗しました', 'error');
             }
         }
-
-        // データ移行
-        async function migrateData() {
-            const url = localStorage.getItem('omamori_api_url');
-            const resultDiv = document.getElementById('migrate-result');
+        
+        function onQrCodeSuccess(decodedText) {
+            // スキャナーを停止
+            stopQrScanner();
             
-            if (!url) {
+            // URLの検証
+            if (!decodedText.startsWith('https://script.google.com/')) {
+                showToast('有効なGoogle Apps Script URLではありません', 'error');
+                return;
+            }
+            
+            // URLを設定
+            document.getElementById('api-url').value = decodedText;
+            
+            // 手動入力タブに切り替え
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelector('.tab').classList.add('active');
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById('tab-manual').classList.add('active');
+            
+            showToast('QRコードを読み取りました。接続テストを実行してください。', 'success');
+        }
+        
+        function onQrCodeError(error) {
+            // エラーは無視（スキャン中は常に発生する）
+        }
+        
+        // ========================================
+        // データ移行
+        // ========================================
+        
+        async function migrateData() {
+            if (!isApiEnabled()) {
                 showToast('先にAPI URLを設定してください', 'error');
                 return;
             }
             
-            if (!confirm('ブラウザに保存されているデータをGoogleスプレッドシートに移行します。\n既存のスプレッドシートデータは上書きされます。\n\n続行しますか？')) {
-                return;
-            }
-            
+            const resultDiv = document.getElementById('migrate-result');
             resultDiv.className = 'info-box';
-            resultDiv.innerHTML = '<span class="loading"></span>データ移行中...';
+            resultDiv.innerHTML = '<span class="loading"></span> データ移行中...';
             resultDiv.classList.remove('hidden');
             
             try {
-                // マスタデータ
-                const masterData = JSON.parse(localStorage.getItem('omamori_master') || '{}');
-                // 在庫データ
-                const stockData = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
-                // 発注データ
-                const orderData = JSON.parse(localStorage.getItem('omamori_orders') || '{}');
-                // 履歴データ
-                const historyData = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
+                // ローカルデータを取得
+                const master = JSON.parse(localStorage.getItem('omamori_master') || 'null');
+                const stock = JSON.parse(localStorage.getItem('omamori_stock') || '{}');
+                const orders = JSON.parse(localStorage.getItem('omamori_orders') || '{}');
+                const history = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
                 
-                const migratePayload = {
-                    action: 'migrate',
-                    master: masterData,
-                    stock: stockData,
-                    orders: orderData,
-                    history: historyData
-                };
+                if (!master && Object.keys(stock).length === 0 && Object.keys(orders).length === 0 && history.length === 0) {
+                    resultDiv.className = 'warning-box';
+                    resultDiv.innerHTML = '⚠️ 移行するデータがありません';
+                    return;
+                }
                 
-                const response = await fetch(url, {
+                // APIに送信
+                const config = getApiConfig();
+                const response = await fetch(config.url, {
                     method: 'POST',
                     mode: 'cors',
                     headers: {
-                        'Content-Type': 'text/plain'
+                        'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(migratePayload)
+                    body: JSON.stringify({
+                        action: 'migrate',
+                        master: master,
+                        stock: stock,
+                        orders: orders,
+                        history: history
+                    })
                 });
                 
-                const data = await response.json();
+                const result = await response.json();
                 
-                if (data.success) {
+                if (result.success) {
                     resultDiv.className = 'success-box';
-                    resultDiv.innerHTML = `
-                        ✅ <strong>データ移行完了！</strong><br>
-                        マスタ: ${Object.keys(masterData).length}件<br>
-                        在庫: ${Object.keys(stockData).length}件<br>
-                        発注: ${Object.keys(orderData).length}件<br>
-                        履歴: ${historyData.length}件
-                    `;
-                    showToast('データ移行が完了しました！', 'success');
+                    let message = '✅ データ移行が完了しました';
+                    if (result.counts) {
+                        message += `<br>商品: ${result.counts.products || result.counts.master || 0}件`;
+                        message += `<br>履歴: ${result.counts.history || 0}件`;
+                    }
+                    resultDiv.innerHTML = message;
                 } else {
-                    throw new Error(data.error || '移行に失敗しました');
+                    resultDiv.className = 'error-box';
+                    resultDiv.innerHTML = `❌ 移行失敗<br>${result.error || '不明なエラー'}`;
                 }
-            } catch (error) {
+            } catch (e) {
                 resultDiv.className = 'error-box';
-                resultDiv.innerHTML = `❌ <strong>移行失敗</strong><br>${error.message}`;
-                showToast('データ移行に失敗しました', 'error');
+                resultDiv.innerHTML = `❌ 移行失敗<br>${e.message}`;
             }
         }
-
-        // トースト表示
+        
+        // ========================================
+        // ユーティリティ
+        // ========================================
+        
         function showToast(message, type) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
-            toast.className = `toast ${type} show`;
+            toast.className = 'toast ' + type + ' show';
+            
             setTimeout(() => {
                 toast.classList.remove('show');
             }, 3000);
