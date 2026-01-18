@@ -229,6 +229,32 @@
             font-size: 0.85rem;
         }
         
+        /* フィルターボタン */
+        .filter-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .btn-filter {
+            padding: 8px 16px;
+            border: 2px solid #ddd;
+            border-radius: 20px;
+            background: white;
+            color: #666;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-filter:hover {
+            border-color: #8B0000;
+            color: #8B0000;
+        }
+        .btn-filter.active {
+            background: #8B0000;
+            border-color: #8B0000;
+            color: white;
+        }
+        
         .button-row {
             display: flex;
             gap: 12px;
@@ -443,6 +469,13 @@
                     ・発注数と納期を入力すると、請求金額が自動計算されます<br>
                     ・単価は「商品マスタ編集」で設定してください
                 </div>
+                <!-- フィルターボタン -->
+                <div class="filter-buttons" style="margin-bottom: 16px;">
+                    <button id="filter-all" class="btn btn-filter active" onclick="filterOrders('all')">📝 すべて表示</button>
+                    <button id="filter-ordered" class="btn btn-filter" onclick="filterOrders('ordered')">📦 発注済のみ</button>
+                    <button id="filter-not-ordered" class="btn btn-filter" onclick="filterOrders('not-ordered')">⚠️ 未発注のみ</button>
+                </div>
+                
                 <div class="table-container">
                     <table>
                         <thead>
@@ -523,8 +556,8 @@
 
         // 初期化
         document.addEventListener('DOMContentLoaded', async function() {
-            // ローディング表示
-            showToast('データを読み込み中...', 'info');
+            // ローディング表示（消えないモード）
+            showToast('🔄 データを読み込み中...', 'info', true);
             
             try {
                 await loadMaster();
@@ -535,10 +568,11 @@
                 await loadHistory();
                 checkAlerts();
                 updateStats();
-                showToast('最新データを読み込みました', 'success');
+                // 読み込み完了後にメッセージを更新（自動で消える）
+                showToast('✅ 最新データを読み込みました', 'success');
             } catch (e) {
                 console.error('初期化エラー:', e);
-                showToast('データの読み込みに失敗しました', 'error');
+                showToast('❌ データの読み込みに失敗しました', 'error');
             }
         });
 
@@ -728,6 +762,9 @@
             });
         }
 
+        // 現在のフィルター状態
+        let currentOrderFilter = 'all';
+        
         // 発注テーブル描画
         function renderOrderTable() {
             const tbody = document.getElementById('order-tbody');
@@ -738,10 +775,17 @@
             }).forEach(code => {
                 const product = master[code];
                 const order = orderData[code] || { ordered: false, quantity: 0, deliveryDate: '' };
+                
+                // フィルター適用
+                if (currentOrderFilter === 'ordered' && !order.ordered) return;
+                if (currentOrderFilter === 'not-ordered' && order.ordered) return;
+                
                 const unitPrice = product.unitPrice || 0;
                 const amount = order.ordered && order.quantity > 0 ? unitPrice * order.quantity : 0;
 
                 const row = document.createElement('tr');
+                row.dataset.code = code;
+                row.dataset.ordered = order.ordered ? 'true' : 'false';
                 row.innerHTML = `
                     <td class="product-name-cell">
                         ${product.name}<br>
@@ -773,6 +817,28 @@
             });
             
             updateTotalAmount();
+        }
+        
+        // 発注フィルター
+        function filterOrders(filter) {
+            currentOrderFilter = filter;
+            
+            // ボタンのアクティブ状態を更新
+            document.querySelectorAll('.btn-filter').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(`filter-${filter}`).classList.add('active');
+            
+            // テーブルを再描画
+            renderOrderTable();
+            
+            // フィルター結果をトーストで表示
+            const filterNames = {
+                'all': 'すべて',
+                'ordered': '発注済',
+                'not-ordered': '未発注'
+            };
+            showToast(`${filterNames[filter]}を表示中`, 'info');
         }
 
         // 在庫変更時のハンドラ
@@ -890,21 +956,26 @@
 
         // データ更新（スプレッドシートから最新データを取得）
         async function refreshData() {
-            showToast('データを更新中...', 'info');
+            // 更新中のメッセージ（消えないモード）
+            showToast('🔄 データを更新中...', 'info', true);
             
             try {
+                // データをバックグラウンドで取得（表示はそのまま）
                 await loadMaster();
                 await loadStock();
                 await loadOrders();
+                await loadHistory();
+                
+                // データ取得完了後に一括で再描画
                 renderStockTable();
                 renderOrderTable();
-                await loadHistory();
                 checkAlerts();
                 updateStats();
-                showToast('データを更新しました', 'success');
+                
+                showToast('✅ データを更新しました', 'success');
             } catch (e) {
                 console.error('更新エラー:', e);
-                showToast('更新に失敗しました', 'error');
+                showToast('❌ 更新に失敗しました', 'error');
             }
         }
 
@@ -1128,13 +1199,34 @@
             URL.revokeObjectURL(url);
         }
 
-        function showToast(message, type) {
+        let toastTimer = null;
+        
+        function showToast(message, type, persistent = false) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
             toast.className = 'toast ' + type + ' show';
-            setTimeout(() => {
-                toast.className = 'toast';
-            }, 2000);
+            
+            // 既存のタイマーをクリア
+            if (toastTimer) {
+                clearTimeout(toastTimer);
+                toastTimer = null;
+            }
+            
+            // persistentがfalseの場合のみ自動で消す
+            if (!persistent) {
+                toastTimer = setTimeout(() => {
+                    toast.className = 'toast';
+                }, 2000);
+            }
+        }
+        
+        function hideToast() {
+            const toast = document.getElementById('toast');
+            toast.className = 'toast';
+            if (toastTimer) {
+                clearTimeout(toastTimer);
+                toastTimer = null;
+            }
         }
 
         // 外部から呼び出し可能な関数（メインアプリから使用）
