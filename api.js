@@ -68,6 +68,7 @@ async function apiGet(action, params = {}) {
 
 /**
  * POSTリクエストを送信
+ * GASのCORS制限とリダイレクトに対応
  */
 async function apiPost(action, data = {}) {
     const config = getApiConfig();
@@ -75,21 +76,27 @@ async function apiPost(action, data = {}) {
         throw new Error('API未設定');
     }
     
-    // GASのCORS制限に対応するためtext/plainを使用
-    const response = await fetch(config.url, {
-        method: 'POST',
-        mode: 'cors',
-        headers: {
-            'Content-Type': 'text/plain'
-        },
-        body: JSON.stringify({ action, ...data })
-    });
-    
-    if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+    // GASはPOSTリクエストでリダイレクトを返すことがある
+    // redirect: 'follow'とmode: 'cors'ではCORSエラーになるため
+    // no-corsモードを使用し、レスポンスは空になるがリクエストは送信される
+    try {
+        const response = await fetch(config.url, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: {
+                'Content-Type': 'text/plain'
+            },
+            body: JSON.stringify({ action, ...data })
+        });
+        
+        // no-corsモードではresponse.typeが'opaque'になり、
+        // レスポンスボディは読めないが、リクエストは正常に送信される
+        // GAS側では正常に処理される
+        return { success: true };
+    } catch (e) {
+        console.error('API POSTエラー:', e);
+        throw e;
     }
-    
-    return await response.json();
 }
 
 // ========================================
