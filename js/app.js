@@ -408,7 +408,7 @@ async function updateStock(productCode, quantity, operation, note) {
     await addStockHistory(operation === 'add' ? 'in' : 'out', productCode, quantity, note);
 }
 
-// 納品時に発注数量を自動減少させる
+// 納品時に発注数量を自動減少させる（分納対応）
 async function updateOrderQuantityOnDelivery(productCode, deliveredQuantity) {
     const orderData = JSON.parse(localStorage.getItem('omamori_orders') || '{}');
     
@@ -418,30 +418,72 @@ async function updateOrderQuantityOnDelivery(productCode, deliveredQuantity) {
     }
     
     // 発注済みの場合のみ処理
-    if (orderData[productCode].ordered && orderData[productCode].quantity > 0) {
-        // 発注数量を減少
-        orderData[productCode].quantity = Math.max(0, orderData[productCode].quantity - deliveredQuantity);
-        
-        // 発注数量が0になったら未発注に変更
-        if (orderData[productCode].quantity === 0) {
-            orderData[productCode].ordered = false;
-            orderData[productCode].deliveryDate = '';
+    if (!orderData[productCode].ordered) {
+        return;
+    }
+    
+    // 分納データを取得（新形式または旧形式に対応）
+    let deliveries = [];
+    if (orderData[productCode].deliveries && Array.isArray(orderData[productCode].deliveries)) {
+        // 新形式（分納配列）
+        deliveries = [...orderData[productCode].deliveries];
+    } else if (orderData[productCode].quantity > 0) {
+        // 旧形式（単一のquantityとdeliveryDate）→分納形式に変換
+        deliveries = [{
+            quantity: orderData[productCode].quantity,
+            date: orderData[productCode].deliveryDate || ''
+        }];
+    }
+    
+    if (deliveries.length === 0) {
+        return; // 分納データがない
+    }
+    
+    // 納期が早い順にソート
+    deliveries.sort((a, b) => {
+        if (!a.date) return 1;
+        if (!b.date) return -1;
+        return a.date.localeCompare(b.date);
+    });
+    
+    // 納品数量を先頭から順に消化
+    let remaining = deliveredQuantity;
+    const updatedDeliveries = [];
+    
+    for (const delivery of deliveries) {
+        if (remaining <= 0) {
+            // 消化完了、残りの分納はそのまま残す
+            updatedDeliveries.push(delivery);
+        } else if (remaining >= delivery.quantity) {
+            // この分納を完全に消化
+            remaining -= delivery.quantity;
+            // この分納は削除（updatedDeliveriesに追加しない）
+        } else {
+            // この分納を部分的に消化
+            updatedDeliveries.push({
+                quantity: delivery.quantity - remaining,
+                date: delivery.date
+            });
+            remaining = 0;
         }
-        
-        localStorage.setItem('omamori_orders', JSON.stringify(orderData));
-        
-        // APIにも保存
-        if (typeof isApiEnabled === 'function' && isApiEnabled()) {
-            try {
-                await updateSingleOrderToApi(
-                    productCode,
-                    orderData[productCode].ordered,
-                    orderData[productCode].quantity,
-                    orderData[productCode].deliveryDate
-                );
-            } catch (e) {
-                console.error('APIへの発注更新失敗:', e);
-            }
+    }
+    
+    // 発注データを更新
+    orderData[productCode].deliveries = updatedDeliveries;
+    
+    // 分納がすべて消化されたら未発注に変更
+    if (updatedDeliveries.length === 0) {
+        orderData[productCode].ordered = false;
+    }
+    
+    localStorage.setItem('omamori_orders', JSON.stringify(orderData));
+    
+    // APIにも保存
+    if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+        try {
+            await saveOrdersDataToApi(orderData);
+        } catch (e) {
+            console.error('APIへの発注更新失敗:', e);
         }
     }
 }
