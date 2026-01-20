@@ -105,7 +105,15 @@ const elements = {
     
     // 在庫アラート
     stockAlertBanner: document.getElementById('stock-alert-banner'),
-    alertText: document.getElementById('alert-text')
+    alertText: document.getElementById('alert-text'),
+    
+    // 在庫反映関連
+    confirmStockActions: document.getElementById('confirm-stock-actions'),
+    btnConfirmStock: document.getElementById('btn-confirm-stock'),
+    stockUpdateOverlay: document.getElementById('stock-update-overlay'),
+    stockUpdateSpinner: document.getElementById('stock-update-spinner'),
+    stockUpdateStatus: document.getElementById('stock-update-status'),
+    stockUpdateDetail: document.getElementById('stock-update-detail')
 };
 
 // ========================================
@@ -143,6 +151,11 @@ function initEventListeners() {
     elements.btnExportCsv.addEventListener('click', showExportOptions);
     elements.btnContinueScan.addEventListener('click', continueScan);
     elements.btnNewSession.addEventListener('click', startNewSession);
+    
+    // 在庫確定ボタン
+    if (elements.btnConfirmStock) {
+        elements.btnConfirmStock.addEventListener('click', confirmStockUpdate);
+    }
 }
 
 // ========================================
@@ -329,29 +342,11 @@ function cancelScanConfirm() {
 
 async function confirmScanRegister() {
     if (pendingScanData) {
-        // セッションに追加
+        // セッションに追加（在庫更新はここでは行わない）
         session.scannedBoxes.push(pendingScanData);
         
-        // 在庫更新（納品・出庫モードのみ）
-        const product = productMaster[pendingScanData.productCode];
-        const quantity = product ? product.quantity : 0;
-        
-        if (session.mode === 'delivery') {
-            await updateStock(pendingScanData.productCode, quantity, 'add', `QR: ${pendingScanData.qrCode}`);
-            showSuccessToast(`${pendingScanData.productName} を登録しました`);
-        } else if (session.mode === 'shipment') {
-            const result = await updateStockWithCheck(pendingScanData.productCode, quantity, `QR: ${pendingScanData.qrCode}`);
-            showSuccessToast(`${pendingScanData.productName} を登録しました`);
-            
-            // 安心在庫を下回った場合は警告を表示
-            if (result.belowSafeStock && result.justBecameLow) {
-                setTimeout(() => {
-                    showSafeStockWarning(result.productName, result.currentStock, result.safeStock);
-                }, 500);
-            }
-        } else {
-            showSuccessToast(`${pendingScanData.productName} を登録しました`);
-        }
+        // トースト表示（在庫更新は後で一括で行う）
+        showSuccessToast(`${pendingScanData.productName} を登録しました`);
         
         // UI更新
         updateScanUI(pendingScanData);
@@ -757,6 +752,12 @@ function confirmBackToMode() {
 }
 
 function startNewSession() {
+    // 在庫未反映の場合は警告
+    if ((session.mode === 'delivery' || session.mode === 'shipment') && !session.stockConfirmed && session.scannedBoxes.length > 0) {
+        if (!confirm('在庫がまだ反映されていません。\n本当にホーム画面に戻りますか？')) {
+            return;
+        }
+    }
     checkStockAlerts();
     showScreen('mode-select-screen');
 }
@@ -996,19 +997,33 @@ function showSummary() {
         elements.summaryTbody.appendChild(row);
     });
     
-    // 在庫更新メッセージ
-    const stockUpdateMessage = document.getElementById('stock-update-message');
-    if (stockUpdateMessage) {
-        if (session.mode === 'delivery') {
-            stockUpdateMessage.textContent = '✅ 在庫が自動で増加しました';
-            stockUpdateMessage.style.color = '#2e7d32';
-        } else if (session.mode === 'shipment') {
-            stockUpdateMessage.textContent = '✅ 在庫が自動で減少しました';
-            stockUpdateMessage.style.color = '#e65100';
+    // 在庫更新メッセージ（初期状態では非表示）
+    const stockUpdateInfo = document.getElementById('stock-update-info');
+    if (stockUpdateInfo) {
+        stockUpdateInfo.style.display = 'none';
+    }
+    
+    // 確定ボタンの表示制御（納品・出庫モードのみ表示）
+    if (elements.confirmStockActions) {
+        if (session.mode === 'delivery' || session.mode === 'shipment') {
+            elements.confirmStockActions.style.display = 'block';
+            elements.btnConfirmStock.disabled = false;
+            elements.btnConfirmStock.textContent = '✅ 在庫に反映する';
+            
+            // モードに応じたボタン色
+            if (session.mode === 'delivery') {
+                elements.btnConfirmStock.style.background = 'linear-gradient(135deg, #4CAF50 0%, #388E3C 100%)';
+            } else {
+                elements.btnConfirmStock.style.background = 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)';
+            }
         } else {
-            stockUpdateMessage.textContent = '';
+            // 棚卸モードでは確定ボタンを非表示
+            elements.confirmStockActions.style.display = 'none';
         }
     }
+    
+    // 在庫反映済みフラグをリセット
+    session.stockConfirmed = false;
     
     showScreen('summary-screen');
 }
@@ -1130,5 +1145,172 @@ async function loadMasterFromStorage() {
         } catch (e) {
             productMaster = { ...DEFAULT_MASTER };
         }
+    }
+}
+
+// ========================================
+// 在庫一括反映処理
+// ========================================
+
+/**
+ * 在庫を一括でスプレッドシートに反映する
+ */
+async function confirmStockUpdate() {
+    if (session.stockConfirmed) {
+        showSuccessToast('既に在庫に反映済みです');
+        return;
+    }
+    
+    if (session.scannedBoxes.length === 0) {
+        showErrorToast('反映するデータがありません');
+        return;
+    }
+    
+    // 確認ダイアログ
+    const modeText = session.mode === 'delivery' ? '納品' : '出庫';
+    const totalQuantity = calculateTotalQuantity();
+    if (!confirm(`${modeText}データを在庫に反映します。\n\n総数量: ${totalQuantity}個\n\nよろしいですか？`)) {
+        return;
+    }
+    
+    // オーバーレイを表示
+    showStockUpdateOverlay();
+    
+    try {
+        // 商品別に集計
+        const summary = calculateSummary();
+        const productCodes = Object.keys(summary);
+        let processedCount = 0;
+        let lowStockWarnings = [];
+        
+        // 各商品の在庫を更新
+        for (const productCode of productCodes) {
+            const item = summary[productCode];
+            const quantity = item.total;
+            
+            // 進捗表示を更新
+            processedCount++;
+            updateStockUpdateProgress(processedCount, productCodes.length, item.name);
+            
+            if (session.mode === 'delivery') {
+                // 納品モード: 在庫を増加
+                await updateStock(productCode, quantity, 'add', `一括納品: ${item.boxCount}箱`);
+            } else if (session.mode === 'shipment') {
+                // 出庫モード: 在庫を減少
+                const result = await updateStockWithCheck(productCode, quantity, `一括出庫: ${item.boxCount}箱`);
+                
+                // 安心在庫を下回った場合は記録
+                if (result.belowSafeStock) {
+                    lowStockWarnings.push({
+                        name: result.productName,
+                        currentStock: result.currentStock,
+                        safeStock: result.safeStock
+                    });
+                }
+            }
+            
+            // 少し待機（APIレート制限対策）
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // 完了表示
+        showStockUpdateComplete();
+        
+        // フラグを設定
+        session.stockConfirmed = true;
+        
+        // 少し待ってからオーバーレイを閉じる
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        hideStockUpdateOverlay();
+        
+        // 確定ボタンを無効化して表示を変更
+        if (elements.btnConfirmStock) {
+            elements.btnConfirmStock.disabled = true;
+            elements.btnConfirmStock.textContent = '✅ 反映済み';
+            elements.btnConfirmStock.style.background = '#ccc';
+        }
+        
+        // 在庫更新メッセージを表示
+        const stockUpdateInfo = document.getElementById('stock-update-info');
+        const stockUpdateMessage = document.getElementById('stock-update-message');
+        if (stockUpdateInfo && stockUpdateMessage) {
+            stockUpdateInfo.style.display = 'block';
+            if (session.mode === 'delivery') {
+                stockUpdateMessage.textContent = '✅ 在庫が増加しました（スプレッドシートに反映済み）';
+                stockUpdateMessage.style.color = '#2e7d32';
+            } else {
+                stockUpdateMessage.textContent = '✅ 在庫が減少しました（スプレッドシートに反映済み）';
+                stockUpdateMessage.style.color = '#e65100';
+            }
+        }
+        
+        // 安心在庫警告があれば表示
+        if (lowStockWarnings.length > 0) {
+            setTimeout(() => {
+                const warningText = lowStockWarnings.map(w => 
+                    `・${w.name}: 残り${w.currentStock}個（安心在庫: ${w.safeStock}個）`
+                ).join('\n');
+                alert(`⚠️ 安心在庫を下回った商品があります\n\n${warningText}`);
+            }, 500);
+        }
+        
+        // アラートバナーを更新
+        await checkStockAlerts();
+        
+    } catch (error) {
+        console.error('在庫反映エラー:', error);
+        hideStockUpdateOverlay();
+        showErrorToast('在庫の反映に失敗しました');
+        alert('在庫の反映中にエラーが発生しました。\n\n' + error.message);
+    }
+}
+
+/**
+ * 在庫更新オーバーレイを表示
+ */
+function showStockUpdateOverlay() {
+    if (elements.stockUpdateOverlay) {
+        elements.stockUpdateOverlay.classList.remove('hidden');
+        elements.stockUpdateSpinner.classList.add('spinning');
+        elements.stockUpdateStatus.textContent = '在庫数を反映しています...';
+        elements.stockUpdateDetail.textContent = '';
+    }
+}
+
+/**
+ * 在庫更新の進捗を表示
+ */
+function updateStockUpdateProgress(current, total, productName) {
+    if (elements.stockUpdateDetail) {
+        elements.stockUpdateDetail.textContent = `${current}/${total}: ${productName}`;
+    }
+}
+
+/**
+ * 在庫更新完了を表示
+ */
+function showStockUpdateComplete() {
+    if (elements.stockUpdateSpinner) {
+        elements.stockUpdateSpinner.classList.remove('spinning');
+        elements.stockUpdateSpinner.textContent = '✅';
+    }
+    if (elements.stockUpdateStatus) {
+        elements.stockUpdateStatus.textContent = '完了しました！';
+        elements.stockUpdateStatus.style.color = '#4CAF50';
+    }
+    if (elements.stockUpdateDetail) {
+        elements.stockUpdateDetail.textContent = 'スプレッドシートに反映されました';
+    }
+}
+
+/**
+ * 在庫更新オーバーレイを非表示
+ */
+function hideStockUpdateOverlay() {
+    if (elements.stockUpdateOverlay) {
+        elements.stockUpdateOverlay.classList.add('hidden');
+        // 状態をリセット
+        elements.stockUpdateSpinner.textContent = '🔄';
+        elements.stockUpdateStatus.style.color = '#333';
     }
 }
