@@ -370,6 +370,70 @@
             color: #999;
         }
         
+        /* 分納明細スタイル */
+        .delivery-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-width: 200px;
+        }
+        .delivery-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #f9f9f9;
+            padding: 6px 8px;
+            border-radius: 4px;
+            border: 1px solid #e0e0e0;
+        }
+        .delivery-item input[type="number"] {
+            width: 70px;
+        }
+        .delivery-item input[type="date"] {
+            width: 130px;
+        }
+        .delivery-item .btn-remove {
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .delivery-item .btn-remove:hover {
+            background: #d32f2f;
+        }
+        .btn-add-delivery {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .btn-add-delivery:hover {
+            background: #388E3C;
+        }
+        .delivery-total {
+            font-weight: bold;
+            color: #8B0000;
+        }
+        .no-delivery {
+            color: #999;
+            font-style: italic;
+        }
+        
         @media (max-width: 600px) {
             .tabs {
                 flex-wrap: wrap;
@@ -482,8 +546,8 @@
                             <tr>
                                 <th>商品名</th>
                                 <th>発注状況</th>
-                                <th>発注数</th>
-                                <th>納期</th>
+                                <th>分納明細（数量・納期）</th>
+                                <th>合計</th>
                                 <th>単価</th>
                                 <th>金額</th>
                             </tr>
@@ -848,6 +912,35 @@
         // 現在のフィルター状態
         let currentOrderFilter = 'all';
         
+        // 発注データの後方互換性対応（旧形式→分納形式に変換）
+        function normalizeOrderData(order) {
+            if (!order) {
+                return { ordered: false, deliveries: [] };
+            }
+            // 新形式（deliveries配列がある）
+            if (order.deliveries && Array.isArray(order.deliveries)) {
+                return order;
+            }
+            // 旧形式（quantityとdeliveryDate）→新形式に変換
+            const deliveries = [];
+            if (order.quantity > 0 || order.deliveryDate) {
+                deliveries.push({
+                    quantity: order.quantity || 0,
+                    date: order.deliveryDate || ''
+                });
+            }
+            return {
+                ordered: order.ordered || false,
+                deliveries: deliveries
+            };
+        }
+        
+        // 分納の合計数量を計算
+        function getTotalQuantity(deliveries) {
+            if (!deliveries || !Array.isArray(deliveries)) return 0;
+            return deliveries.reduce((sum, d) => sum + (parseInt(d.quantity) || 0), 0);
+        }
+        
         // 発注テーブル描画
         function renderOrderTable() {
             const tbody = document.getElementById('order-tbody');
@@ -857,47 +950,135 @@
                 return master[a].name.localeCompare(master[b].name, 'ja');
             }).forEach(code => {
                 const product = master[code];
-                const order = orderData[code] || { ordered: false, quantity: 0, deliveryDate: '' };
+                const order = normalizeOrderData(orderData[code]);
                 
                 // フィルター適用
                 if (currentOrderFilter === 'ordered' && !order.ordered) return;
                 if (currentOrderFilter === 'not-ordered' && order.ordered) return;
                 
                 const unitPrice = product.unitPrice || 0;
-                const amount = order.ordered && order.quantity > 0 ? unitPrice * order.quantity : 0;
+                const totalQty = getTotalQuantity(order.deliveries);
+                const amount = order.ordered && totalQty > 0 ? unitPrice * totalQty : 0;
 
                 const row = document.createElement('tr');
                 row.dataset.code = code;
                 row.dataset.ordered = order.ordered ? 'true' : 'false';
+                
+                // 分納明細のHTMLを生成
+                let deliveriesHtml = '<div class="delivery-list" id="deliveries-' + code + '">';
+                if (order.deliveries && order.deliveries.length > 0) {
+                    order.deliveries.forEach((d, idx) => {
+                        deliveriesHtml += `
+                            <div class="delivery-item" data-index="${idx}">
+                                <input type="number" 
+                                       class="delivery-qty" 
+                                       value="${d.quantity || 0}" 
+                                       min="0"
+                                       placeholder="数量"
+                                       onchange="onDeliveryChange('${code}')">個
+                                <input type="date" 
+                                       class="delivery-date" 
+                                       value="${d.date || ''}"
+                                       onchange="onDeliveryChange('${code}')">
+                                <button class="btn-remove" onclick="removeDelivery('${code}', ${idx})" title="削除">×</button>
+                            </div>
+                        `;
+                    });
+                } else {
+                    deliveriesHtml += '<div class="no-delivery">分納なし</div>';
+                }
+                deliveriesHtml += `
+                    <button class="btn-add-delivery" onclick="addDelivery('${code}')">
+                        ➕ 分納を追加
+                    </button>
+                </div>`;
+                
                 row.innerHTML = `
                     <td class="product-name-cell">
                         ${product.name}<br>
                         <span class="product-code">${code}</span>
                     </td>
                     <td>
-                        <select id="order-status-${code}" onchange="onOrderChange('${code}')">
+                        <select id="order-status-${code}" onchange="onOrderStatusChange('${code}')">
                             <option value="false" ${!order.ordered ? 'selected' : ''}>未発注</option>
                             <option value="true" ${order.ordered ? 'selected' : ''}>発注済</option>
                         </select>
                     </td>
-                    <td>
-                        <input type="number" 
-                               id="order-qty-${code}" 
-                               value="${order.quantity}" 
-                               min="0"
-                               onchange="onOrderChange('${code}')">
-                    </td>
-                    <td>
-                        <input type="date" 
-                               id="order-date-${code}" 
-                               value="${order.deliveryDate}"
-                               onchange="onOrderChange('${code}')">
-                    </td>
+                    <td>${deliveriesHtml}</td>
+                    <td class="delivery-total" id="order-total-${code}">${totalQty}個</td>
                     <td>¥${unitPrice.toLocaleString()}</td>
                     <td id="order-amount-${code}">¥${amount.toLocaleString()}</td>
                 `;
                 tbody.appendChild(row);
             });
+            
+            updateTotalAmount();
+        }
+        
+        // 分納を追加
+        function addDelivery(code) {
+            if (!orderData[code]) {
+                orderData[code] = { ordered: false, deliveries: [] };
+            }
+            const order = normalizeOrderData(orderData[code]);
+            order.deliveries.push({ quantity: 0, date: '' });
+            orderData[code] = order;
+            renderOrderTable();
+        }
+        
+        // 分納を削除
+        function removeDelivery(code, index) {
+            const order = normalizeOrderData(orderData[code]);
+            order.deliveries.splice(index, 1);
+            orderData[code] = order;
+            renderOrderTable();
+        }
+        
+        // 分納内容変更時
+        function onDeliveryChange(code) {
+            const container = document.getElementById(`deliveries-${code}`);
+            const items = container.querySelectorAll('.delivery-item');
+            const deliveries = [];
+            
+            items.forEach(item => {
+                const qty = parseInt(item.querySelector('.delivery-qty').value) || 0;
+                const date = item.querySelector('.delivery-date').value || '';
+                deliveries.push({ quantity: qty, date: date });
+            });
+            
+            if (!orderData[code]) {
+                orderData[code] = { ordered: false, deliveries: [] };
+            }
+            orderData[code].deliveries = deliveries;
+            
+            // 合計と金額を更新
+            const totalQty = getTotalQuantity(deliveries);
+            document.getElementById(`order-total-${code}`).textContent = totalQty + '個';
+            
+            const unitPrice = master[code].unitPrice || 0;
+            const statusSelect = document.getElementById(`order-status-${code}`);
+            const isOrdered = statusSelect.value === 'true';
+            const amount = isOrdered && totalQty > 0 ? unitPrice * totalQty : 0;
+            document.getElementById(`order-amount-${code}`).textContent = '¥' + amount.toLocaleString();
+            
+            updateTotalAmount();
+        }
+        
+        // 発注状況変更時
+        function onOrderStatusChange(code) {
+            const statusSelect = document.getElementById(`order-status-${code}`);
+            const isOrdered = statusSelect.value === 'true';
+            
+            if (!orderData[code]) {
+                orderData[code] = { ordered: false, deliveries: [] };
+            }
+            orderData[code].ordered = isOrdered;
+            
+            // 金額を更新
+            const totalQty = getTotalQuantity(orderData[code].deliveries);
+            const unitPrice = master[code].unitPrice || 0;
+            const amount = isOrdered && totalQty > 0 ? unitPrice * totalQty : 0;
+            document.getElementById(`order-amount-${code}`).textContent = '¥' + amount.toLocaleString();
             
             updateTotalAmount();
         }
@@ -954,17 +1135,19 @@
             updateTotalAmount();
         }
 
-        // 請求金額合計更新
+        // 請求金額合計更新（分納対応）
         function updateTotalAmount() {
             let total = 0;
             
             Object.keys(master).forEach(code => {
                 const statusSelect = document.getElementById(`order-status-${code}`);
-                const qtyInput = document.getElementById(`order-qty-${code}`);
+                const totalCell = document.getElementById(`order-total-${code}`);
                 
-                if (statusSelect && qtyInput) {
+                if (statusSelect && totalCell) {
                     const ordered = statusSelect.value === 'true';
-                    const quantity = parseInt(qtyInput.value) || 0;
+                    // 合計セルから数量を取得（「XX個」形式）
+                    const totalText = totalCell.textContent;
+                    const quantity = parseInt(totalText.replace(/[^0-9]/g, '')) || 0;
                     const unitPrice = master[code] ? (master[code].unitPrice || 0) : 0;
                     
                     if (ordered && quantity > 0) {
@@ -1010,18 +1193,29 @@
             updateStats();
         }
 
-        // 発注状況保存
+        // 発注状況保存（分納対応）
         async function saveOrders() {
+            // 各商品の発注データを収集
             Object.keys(master).forEach(code => {
                 const statusSelect = document.getElementById(`order-status-${code}`);
-                const qtyInput = document.getElementById(`order-qty-${code}`);
-                const dateInput = document.getElementById(`order-date-${code}`);
+                const container = document.getElementById(`deliveries-${code}`);
                 
-                if (statusSelect && qtyInput && dateInput) {
+                if (statusSelect && container) {
+                    const items = container.querySelectorAll('.delivery-item');
+                    const deliveries = [];
+                    
+                    items.forEach(item => {
+                        const qty = parseInt(item.querySelector('.delivery-qty').value) || 0;
+                        const date = item.querySelector('.delivery-date').value || '';
+                        // 数量が0で納期も空の場合はスキップ
+                        if (qty > 0 || date) {
+                            deliveries.push({ quantity: qty, date: date });
+                        }
+                    });
+                    
                     orderData[code] = {
                         ordered: statusSelect.value === 'true',
-                        quantity: parseInt(qtyInput.value) || 0,
-                        deliveryDate: dateInput.value
+                        deliveries: deliveries
                     };
                 }
             });
@@ -1070,7 +1264,7 @@
             }
         }
 
-        // 発注状況クリア
+        // 発注状況クリア（分納対応）
         function clearOrders() {
             if (!confirm('すべての発注状況をクリアしますか？')) {
                 return;
@@ -1080,8 +1274,7 @@
             Object.keys(master).forEach(code => {
                 orderData[code] = {
                     ordered: false,
-                    quantity: 0,
-                    deliveryDate: ''
+                    deliveries: []
                 };
             });
 
@@ -1245,24 +1438,32 @@
             showToast('履歴CSVをダウンロードしました', 'success');
         }
 
-        // 発注一覧CSV出力
+        // 発注一覧CSV出力（分納対応）
         function exportOrders() {
             let csv = '\uFEFF';
-            csv += '商品コード,商品名,発注状況,発注数,納期,単価,金額\n';
+            csv += '商品コード,商品名,発注状況,分納番号,数量,納期,単価,金額\n';
             
             let hasOrders = false;
             
             Object.keys(master).sort((a, b) => master[a].name.localeCompare(master[b].name, 'ja')).forEach(code => {
                 const product = master[code];
-                const order = orderData[code] || { ordered: false, quantity: 0, deliveryDate: '' };
+                const order = normalizeOrderData(orderData[code]);
                 const unitPrice = product.unitPrice || 0;
-                const amount = order.ordered && order.quantity > 0 ? unitPrice * order.quantity : 0;
                 
                 if (order.ordered) {
                     hasOrders = true;
                 }
                 
-                csv += `${code},${product.name},${order.ordered ? '発注済' : '未発注'},${order.quantity},${order.deliveryDate},${unitPrice},${amount}\n`;
+                if (order.deliveries && order.deliveries.length > 0) {
+                    // 分納ごとに行を出力
+                    order.deliveries.forEach((d, idx) => {
+                        const amount = order.ordered && d.quantity > 0 ? unitPrice * d.quantity : 0;
+                        csv += `${code},${product.name},${order.ordered ? '発注済' : '未発注'},${idx + 1},${d.quantity},${d.date},${unitPrice},${amount}\n`;
+                    });
+                } else {
+                    // 分納なしの場合
+                    csv += `${code},${product.name},${order.ordered ? '発注済' : '未発注'},-,0,,${unitPrice},0\n`;
+                }
             });
 
             if (!hasOrders) {
