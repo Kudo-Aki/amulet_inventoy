@@ -85,6 +85,41 @@
         .stock-display .stock-value.normal {
             color: #4CAF50;
         }
+        
+        /* スピナーアニメーション */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .spinning {
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        
+        /* 確定ボタンのスタイル */
+        #btn-confirm-stock:disabled {
+            background: #ccc !important;
+            cursor: not-allowed;
+        }
+        
+        /* 反映済み表示 */
+        .stock-confirmed {
+            background: #e8f5e9;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .stock-confirmed .check-icon {
+            font-size: 2rem;
+            margin-bottom: 8px;
+        }
+        .stock-confirmed .message {
+            color: #2e7d32;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
     </style>
 </head>
 <body>
@@ -208,6 +243,10 @@
                     <tbody id="summary-tbody"></tbody>
                 </table>
             </div>
+            <!-- 確定ボタン（納品・出庫モードのみ表示） -->
+            <div id="confirm-stock-actions" class="summary-actions" style="margin-bottom: 16px;">
+                <button id="btn-confirm-stock" class="btn-primary" style="background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%); font-size: 1.1rem; padding: 16px 32px;">✅ 在庫に反映する</button>
+            </div>
             <div class="summary-actions">
                 <button id="btn-export-csv" class="btn-primary">CSV出力</button>
             </div>
@@ -221,6 +260,15 @@
     <!-- 読み取り成功トースト -->
     <div id="success-toast" class="toast hidden">
         <span id="toast-message"></span>
+    </div>
+
+    <!-- 在庫反映中オーバーレイ -->
+    <div id="stock-update-overlay" class="dialog-overlay hidden">
+        <div class="dialog" style="text-align: center; padding: 32px;">
+            <div id="stock-update-spinner" style="font-size: 3rem; margin-bottom: 16px;">🔄</div>
+            <p id="stock-update-status" style="font-size: 1.2rem; font-weight: bold; color: #333;">在庫数を反映しています...</p>
+            <p id="stock-update-detail" style="font-size: 0.9rem; color: #666; margin-top: 8px;"></p>
+        </div>
     </div>
 
     <!-- スクリプト読み込み -->
