@@ -119,6 +119,44 @@
         .alert-item .stock-info strong {
             color: #c62828;
         }
+        .alert-item .shortage {
+            background: #c62828;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .alert-item .order-status {
+            font-size: 0.8rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+        .alert-item .order-status.ordered {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        .alert-item .order-status.not-ordered {
+            background: #fff3e0;
+            color: #e65100;
+        }
+        .alert-summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .alert-summary .count {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #c62828;
+        }
+        .alert-item-detail {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
         
         /* テーブル共通 */
         .table-container {
@@ -476,7 +514,7 @@
                 <div class="stat-value" id="total-stock">0</div>
                 <div class="stat-label">総在庫数</div>
             </div>
-            <div class="stat-card warning" id="low-stock-card">
+            <div class="stat-card warning" id="low-stock-card" onclick="scrollToAlerts()" style="cursor:pointer;" title="クリックで詳細を表示">
                 <div class="stat-value" id="low-stock-count">0</div>
                 <div class="stat-label">在庫不足</div>
             </div>
@@ -491,6 +529,8 @@
             <div class="tab active" onclick="switchTab('stock')">📦 在庫設定</div>
             <div class="tab" onclick="switchTab('order')">📝 発注状況</div>
             <div class="tab" onclick="switchTab('history')">📋 履歴</div>
+            <div class="tab" onclick="switchTab('report')">📊 レポート</div>
+            <div class="tab" onclick="switchTab('inventory')">📝 棚卸し</div>
         </div>
 
         <!-- 在庫設定タブ -->
@@ -595,11 +635,101 @@
             </div>
         </div>
 
+        <!-- レポートタブ -->
+        <div id="tab-report" class="tab-content">
+            <div class="section">
+                <h2>📊 月次在庫レポート</h2>
+                <div class="info-box">
+                    <strong>💡 使い方:</strong><br>
+                    ・履歴データを元に月ごとの出庫数・納品数を集計します<br>
+                    ・どの商品がよく出るか、季節変動があるかを把握できます
+                </div>
+                <div class="report-controls" style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+                    <label>対象月:
+                        <select id="report-month" onchange="generateReport()">
+                        </select>
+                    </label>
+                    <button class="btn btn-primary" onclick="generateReport()">📊 レポート生成</button>
+                    <button class="btn btn-secondary" onclick="exportReportCSV()">📥 CSV出力</button>
+                </div>
+                <div id="report-summary" style="margin-bottom:16px;"></div>
+                <div id="report-chart" style="margin-bottom:16px;"></div>
+                <div class="table-container">
+                    <table class="stock-table">
+                        <thead>
+                            <tr>
+                                <th>商品名</th>
+                                <th>出庫数</th>
+                                <th>納品数</th>
+                                <th>差引</th>
+                            </tr>
+                        </thead>
+                        <tbody id="report-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 在庫推移グラフ -->
+            <div class="section">
+                <h2>📈 在庫推移グラフ</h2>
+                <div class="info-box">
+                    <strong>💡 使い方:</strong><br>
+                    ・各商品の在庫数の推移をグラフで確認できます<br>
+                    ・発注タイミングや発注量の判断材料になります
+                </div>
+                <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+                    <label>商品:
+                        <select id="graph-product" onchange="generateStockGraph()">
+                            <option value="all">全商品</option>
+                        </select>
+                    </label>
+                </div>
+                <div id="stock-graph-container" style="position:relative;height:300px;">
+                    <canvas id="stock-graph"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 棚卸しタブ -->
+        <div id="tab-inventory" class="tab-content">
+            <div class="section">
+                <h2>📝 棚卸し</h2>
+                <div class="info-box">
+                    <strong>💡 使い方:</strong><br>
+                    ・実際の在庫数を入力して、システム在庫との差異を確認できます<br>
+                    ・「実在庫で更新」ボタンでシステム在庫を実在庫に合わせて更新できます
+                </div>
+                <div style="margin-bottom:16px;">
+                    <span id="inventory-date" style="color:#666;"></span>
+                </div>
+                <div class="table-container">
+                    <table class="stock-table">
+                        <thead>
+                            <tr>
+                                <th>商品名</th>
+                                <th>システム在庫</th>
+                                <th>実在庫</th>
+                                <th>差異</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventory-tbody"></tbody>
+                    </table>
+                </div>
+                <div id="inventory-diff-summary" style="margin:12px 0;font-weight:bold;"></div>
+                <div class="button-row">
+                    <button class="btn btn-primary" onclick="applyInventory()">✅ 実在庫で更新</button>
+                    <button class="btn btn-secondary" onclick="resetInventory()">🔄 リセット</button>
+                    <button class="btn btn-secondary" onclick="exportInventoryCSV()">📥 CSV出力</button>
+                </div>
+            </div>
+        </div>
+
         <a href="index.html" class="back-link">← 管理メニューに戻る</a>
     </div>
 
     <div id="toast" class="toast"></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3"></script>
     <script src="../js/api.js"></script>
     <script>
         // デフォルトマスタ
@@ -732,6 +862,15 @@
             // タブコンテンツの表示切り替え
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             document.getElementById('tab-' + tabName).classList.add('active');
+
+            // レポートタブの初期化
+            if (tabName === 'report') {
+                initReportTab();
+            }
+            // 棚卸しタブの初期化
+            if (tabName === 'inventory') {
+                initInventoryTab();
+            }
         }
 
         // マスタ読み込み
@@ -1290,27 +1429,61 @@
             const alertList = document.getElementById('alert-list');
             alertList.innerHTML = '';
 
-            let hasAlerts = false;
+            const alertItems = [];
 
             Object.keys(master).forEach(code => {
                 const product = master[code];
                 const stock = stockData[code] || { stock: 0, safeStock: 10 };
+                const order = orderData[code] || { ordered: false };
                 
                 if (stock.stock < stock.safeStock) {
-                    hasAlerts = true;
-                    const item = document.createElement('div');
-                    item.className = 'alert-item';
-                    item.innerHTML = `
-                        <span class="product-name">${product.name}</span>
-                        <span class="stock-info">
-                            現在: <strong>${stock.stock}個</strong> / 安心在庫: ${stock.safeStock}個
-                        </span>
-                    `;
-                    alertList.appendChild(item);
+                    const shortage = stock.safeStock - stock.stock;
+                    alertItems.push({
+                        name: product.name,
+                        code: code,
+                        current: stock.stock,
+                        safeStock: stock.safeStock,
+                        shortage: shortage,
+                        ordered: order.ordered
+                    });
                 }
             });
 
-            if (hasAlerts) {
+            // 不足数が大きい順にソート
+            alertItems.sort((a, b) => b.shortage - a.shortage);
+
+            if (alertItems.length > 0) {
+                const notOrderedCount = alertItems.filter(a => !a.ordered).length;
+                
+                // サマリー表示
+                const summary = document.createElement('div');
+                summary.className = 'alert-summary';
+                summary.innerHTML = `
+                    <span class="count">${alertItems.length}種類が在庫不足</span>
+                    ${notOrderedCount > 0 ? `<span class="shortage">${notOrderedCount}種類が未発注!</span>` : '<span style="color:#4CAF50;font-weight:bold;">全て発注済み ✅</span>'}
+                `;
+                alertList.appendChild(summary);
+
+                alertItems.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'alert-item';
+                    div.innerHTML = `
+                        <div style="flex:1;">
+                            <span class="product-name">${item.name}</span>
+                            <div class="alert-item-detail">
+                                <span class="stock-info">
+                                    現在: <strong>${item.current}個</strong> / 安心在庫: ${item.safeStock}個
+                                </span>
+                                <span class="shortage">不足 ${item.shortage}個</span>
+                                <span class="order-status ${item.ordered ? 'ordered' : 'not-ordered'}">
+                                    ${item.ordered ? '📦 発注済み' : '⚠️ 未発注'}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                    alertList.appendChild(div);
+                });
+
                 alertBox.classList.remove('hidden');
             } else {
                 alertBox.classList.add('hidden');
@@ -1347,6 +1520,20 @@
                 lowStockCard.classList.remove('warning');
             } else {
                 lowStockCard.classList.add('warning');
+            }
+        }
+
+        // 在庫不足アラートにスクロール
+        function scrollToAlerts() {
+            const alertBox = document.getElementById('alert-box');
+            if (!alertBox.classList.contains('hidden')) {
+                alertBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // ハイライトアニメーション
+                alertBox.style.transition = 'box-shadow 0.3s';
+                alertBox.style.boxShadow = '0 0 0 4px rgba(244, 67, 54, 0.5)';
+                setTimeout(() => { alertBox.style.boxShadow = ''; }, 1500);
+            } else {
+                showToast('✅ 在庫不足の商品はありません', 'success');
             }
         }
 
@@ -1621,6 +1808,451 @@
                 return lowItems;
             }
         };
+
+        // ========== レポート機能 ==========
+        let reportChart = null;
+        let stockGraphChart = null;
+
+        function initReportTab() {
+            // 月選択プルダウンを生成
+            const select = document.getElementById('report-month');
+            if (select.options.length <= 1) {
+                select.innerHTML = '';
+                const now = new Date();
+                for (let i = 0; i < 12; i++) {
+                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                    const label = `${d.getFullYear()}年${d.getMonth() + 1}月`;
+                    const opt = document.createElement('option');
+                    opt.value = val;
+                    opt.textContent = label;
+                    select.appendChild(opt);
+                }
+            }
+
+            // 商品プルダウンを生成
+            const graphSelect = document.getElementById('graph-product');
+            if (graphSelect.options.length <= 1) {
+                graphSelect.innerHTML = '<option value="all">全商品</option>';
+                Object.keys(master).sort((a, b) => master[a].name.localeCompare(master[b].name, 'ja')).forEach(code => {
+                    const opt = document.createElement('option');
+                    opt.value = code;
+                    opt.textContent = master[code].name;
+                    graphSelect.appendChild(opt);
+                });
+            }
+
+            generateReport();
+            generateStockGraph();
+        }
+
+        function generateReport() {
+            const selectedMonth = document.getElementById('report-month').value;
+            if (!selectedMonth) return;
+
+            const history = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
+            const [year, month] = selectedMonth.split('-').map(Number);
+
+            // 対象月の履歴をフィルタ
+            const monthHistory = history.filter(item => {
+                const d = new Date(item.date);
+                return d.getFullYear() === year && (d.getMonth() + 1) === month;
+            });
+
+            // 商品ごとに集計
+            const report = {};
+            Object.keys(master).forEach(code => {
+                report[code] = { name: master[code].name, inQty: 0, outQty: 0 };
+            });
+
+            monthHistory.forEach(item => {
+                if (!report[item.productCode]) {
+                    report[item.productCode] = { name: item.productName, inQty: 0, outQty: 0 };
+                }
+                if (item.type === 'in') {
+                    report[item.productCode].inQty += item.quantity;
+                } else {
+                    report[item.productCode].outQty += item.quantity;
+                }
+            });
+
+            // サマリー
+            let totalIn = 0, totalOut = 0;
+            Object.values(report).forEach(r => {
+                totalIn += r.inQty;
+                totalOut += r.outQty;
+            });
+
+            const summaryDiv = document.getElementById('report-summary');
+            summaryDiv.innerHTML = `
+                <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                    <div style="background:#e8f5e9;padding:12px 20px;border-radius:8px;flex:1;min-width:120px;text-align:center;">
+                        <div style="font-size:1.5rem;font-weight:bold;color:#2e7d32;">+${totalIn}</div>
+                        <div style="color:#666;font-size:0.85rem;">納品合計</div>
+                    </div>
+                    <div style="background:#ffebee;padding:12px 20px;border-radius:8px;flex:1;min-width:120px;text-align:center;">
+                        <div style="font-size:1.5rem;font-weight:bold;color:#c62828;">-${totalOut}</div>
+                        <div style="color:#666;font-size:0.85rem;">出庫合計</div>
+                    </div>
+                    <div style="background:#e3f2fd;padding:12px 20px;border-radius:8px;flex:1;min-width:120px;text-align:center;">
+                        <div style="font-size:1.5rem;font-weight:bold;color:#1565c0;">${totalIn - totalOut > 0 ? '+' : ''}${totalIn - totalOut}</div>
+                        <div style="color:#666;font-size:0.85rem;">差引</div>
+                    </div>
+                </div>
+            `;
+
+            // テーブル
+            const tbody = document.getElementById('report-tbody');
+            tbody.innerHTML = '';
+            Object.keys(report).sort((a, b) => report[b].outQty - report[a].outQty).forEach(code => {
+                const r = report[code];
+                const diff = r.inQty - r.outQty;
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${r.name}</td>
+                    <td style="color:#2e7d32;font-weight:bold;">+${r.inQty}</td>
+                    <td style="color:#c62828;font-weight:bold;">-${r.outQty}</td>
+                    <td style="color:${diff >= 0 ? '#2e7d32' : '#c62828'};font-weight:bold;">${diff >= 0 ? '+' : ''}${diff}</td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            // チャート
+            renderReportChart(report);
+        }
+
+        function renderReportChart(report) {
+            const chartDiv = document.getElementById('report-chart');
+            chartDiv.innerHTML = '<div style="height:250px;"><canvas id="report-canvas"></canvas></div>';
+            
+            const labels = [];
+            const inData = [];
+            const outData = [];
+
+            Object.keys(report).sort((a, b) => report[b].outQty - report[a].outQty).forEach(code => {
+                labels.push(report[code].name);
+                inData.push(report[code].inQty);
+                outData.push(report[code].outQty);
+            });
+
+            if (reportChart) reportChart.destroy();
+
+            const ctx = document.getElementById('report-canvas').getContext('2d');
+            reportChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '納品数',
+                            data: inData,
+                            backgroundColor: 'rgba(76, 175, 80, 0.7)',
+                            borderColor: '#4CAF50',
+                            borderWidth: 1
+                        },
+                        {
+                            label: '出庫数',
+                            data: outData,
+                            backgroundColor: 'rgba(244, 67, 54, 0.7)',
+                            borderColor: '#f44336',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 } }
+                    }
+                }
+            });
+        }
+
+        function exportReportCSV() {
+            const selectedMonth = document.getElementById('report-month').value;
+            if (!selectedMonth) {
+                showToast('対象月を選択してください', 'error');
+                return;
+            }
+
+            const history = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
+            const [year, month] = selectedMonth.split('-').map(Number);
+
+            const monthHistory = history.filter(item => {
+                const d = new Date(item.date);
+                return d.getFullYear() === year && (d.getMonth() + 1) === month;
+            });
+
+            const report = {};
+            Object.keys(master).forEach(code => {
+                report[code] = { name: master[code].name, inQty: 0, outQty: 0 };
+            });
+            monthHistory.forEach(item => {
+                if (!report[item.productCode]) {
+                    report[item.productCode] = { name: item.productName, inQty: 0, outQty: 0 };
+                }
+                if (item.type === 'in') report[item.productCode].inQty += item.quantity;
+                else report[item.productCode].outQty += item.quantity;
+            });
+
+            let csv = '\uFEFF';
+            csv += `${year}年${month}月 在庫レポート\n`;
+            csv += '商品名,納品数,出庫数,差引\n';
+            Object.keys(report).sort((a, b) => report[b].outQty - report[a].outQty).forEach(code => {
+                const r = report[code];
+                csv += `${r.name},${r.inQty},${r.outQty},${r.inQty - r.outQty}\n`;
+            });
+
+            downloadFile(csv, `omamori_report_${selectedMonth}.csv`, 'text/csv;charset=utf-8');
+            showToast('レポートCSVをダウンロードしました', 'success');
+        }
+
+        // ========== 在庫推移グラフ ==========
+        function generateStockGraph() {
+            const selectedProduct = document.getElementById('graph-product').value;
+            const history = JSON.parse(localStorage.getItem('omamori_stock_history') || '[]');
+
+            if (history.length === 0) {
+                document.getElementById('stock-graph-container').innerHTML = '<p style="color:#999;text-align:center;padding:40px;">履歴データがありません</p>';
+                return;
+            }
+
+            // 履歴を日付順にソート（古い順）
+            const sorted = [...history].reverse();
+
+            // 日別にグループ化
+            const dailyData = {};
+            sorted.forEach(item => {
+                const dateStr = new Date(item.date).toLocaleDateString('ja-JP');
+                if (!dailyData[dateStr]) dailyData[dateStr] = {};
+                if (!dailyData[dateStr][item.productCode]) {
+                    dailyData[dateStr][item.productCode] = { in: 0, out: 0 };
+                }
+                if (item.type === 'in') dailyData[dateStr][item.productCode].in += item.quantity;
+                else dailyData[dateStr][item.productCode].out += item.quantity;
+            });
+
+            const dates = Object.keys(dailyData);
+            const colors = ['#8B0000', '#1565c0', '#2e7d32', '#f57c00', '#6a1b9a', '#00838f', '#c62828', '#33691e'];
+
+            // 商品ごとの累積変動を計算
+            const datasets = [];
+            const targetProducts = selectedProduct === 'all' ? Object.keys(master) : [selectedProduct];
+
+            targetProducts.forEach((code, idx) => {
+                if (!master[code]) return;
+                let cumulative = stockData[code] ? stockData[code].stock : 0;
+                
+                // 現在の在庫から過去の履歴を逆算
+                const totalChange = {};
+                sorted.forEach(item => {
+                    if (item.productCode !== code) return;
+                    const dateStr = new Date(item.date).toLocaleDateString('ja-JP');
+                    if (!totalChange[dateStr]) totalChange[dateStr] = 0;
+                    if (item.type === 'in') totalChange[dateStr] += item.quantity;
+                    else totalChange[dateStr] -= item.quantity;
+                });
+
+                // 現在の在庫から過去に遡って在庫を計算
+                let currentStock = cumulative;
+                const stockByDate = {};
+                // 最新日から過去へ
+                for (let i = dates.length - 1; i >= 0; i--) {
+                    stockByDate[dates[i]] = currentStock;
+                    if (totalChange[dates[i]]) {
+                        currentStock -= totalChange[dates[i]];
+                    }
+                }
+
+                const data = dates.map(d => stockByDate[d] !== undefined ? stockByDate[d] : null);
+
+                datasets.push({
+                    label: master[code].name,
+                    data: data,
+                    borderColor: colors[idx % colors.length],
+                    backgroundColor: colors[idx % colors.length] + '20',
+                    fill: selectedProduct !== 'all',
+                    tension: 0.3,
+                    pointRadius: selectedProduct === 'all' ? 2 : 4
+                });
+            });
+
+            // グラフ描画
+            const container = document.getElementById('stock-graph-container');
+            container.innerHTML = '<canvas id="stock-graph"></canvas>';
+            container.style.height = '300px';
+
+            if (stockGraphChart) stockGraphChart.destroy();
+
+            const ctx = document.getElementById('stock-graph').getContext('2d');
+            stockGraphChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: '在庫数' } },
+                        x: { ticks: { maxRotation: 45 } }
+                    }
+                }
+            });
+        }
+
+        // ========== 棚卸し機能 ==========
+        function initInventoryTab() {
+            const now = new Date();
+            document.getElementById('inventory-date').textContent = `棚卸し日: ${now.toLocaleDateString('ja-JP')} ${now.toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'})}`;
+            renderInventoryTable();
+        }
+
+        function renderInventoryTable() {
+            const tbody = document.getElementById('inventory-tbody');
+            tbody.innerHTML = '';
+
+            Object.keys(master).sort((a, b) => master[a].name.localeCompare(master[b].name, 'ja')).forEach(code => {
+                const product = master[code];
+                const stock = stockData[code] ? stockData[code].stock : 0;
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${product.name}</strong><br><small style="color:#999;">${code}</small></td>
+                    <td style="text-align:center;">${stock}</td>
+                    <td><input type="number" min="0" value="${stock}" data-code="${code}" class="inventory-input" onchange="updateInventoryDiff()" style="width:80px;padding:6px;border:1px solid #ddd;border-radius:4px;text-align:center;"></td>
+                    <td class="inventory-diff" data-code="${code}" style="text-align:center;font-weight:bold;">0</td>
+                `;
+                tbody.appendChild(row);
+            });
+            updateInventoryDiff();
+        }
+
+        function updateInventoryDiff() {
+            let hasDiff = false;
+            let totalDiff = 0;
+            let diffCount = 0;
+
+            document.querySelectorAll('.inventory-input').forEach(input => {
+                const code = input.dataset.code;
+                const systemStock = stockData[code] ? stockData[code].stock : 0;
+                const actualStock = parseInt(input.value) || 0;
+                const diff = actualStock - systemStock;
+                totalDiff += diff;
+
+                const diffCell = document.querySelector(`.inventory-diff[data-code="${code}"]`);
+                if (diff !== 0) {
+                    hasDiff = true;
+                    diffCount++;
+                    diffCell.textContent = (diff > 0 ? '+' : '') + diff;
+                    diffCell.style.color = diff > 0 ? '#2e7d32' : '#c62828';
+                    input.style.borderColor = diff > 0 ? '#4CAF50' : '#f44336';
+                    input.style.background = diff > 0 ? '#f1f8e9' : '#fff3e0';
+                } else {
+                    diffCell.textContent = '0';
+                    diffCell.style.color = '#999';
+                    input.style.borderColor = '#ddd';
+                    input.style.background = 'white';
+                }
+            });
+
+            const summaryDiv = document.getElementById('inventory-diff-summary');
+            if (hasDiff) {
+                summaryDiv.innerHTML = `<span style="color:#e65100;">⚠️ ${diffCount}種類の商品に差異があります（合計: ${totalDiff > 0 ? '+' : ''}${totalDiff}）</span>`;
+            } else {
+                summaryDiv.innerHTML = '<span style="color:#4CAF50;">✅ 全ての商品の在庫が一致しています</span>';
+            }
+        }
+
+        async function applyInventory() {
+            // 差異がある商品を収集
+            const updates = [];
+            document.querySelectorAll('.inventory-input').forEach(input => {
+                const code = input.dataset.code;
+                const systemStock = stockData[code] ? stockData[code].stock : 0;
+                const actualStock = parseInt(input.value) || 0;
+                if (actualStock !== systemStock) {
+                    updates.push({ code, systemStock, actualStock, diff: actualStock - systemStock });
+                }
+            });
+
+            if (updates.length === 0) {
+                showToast('差異のある商品がありません', 'info');
+                return;
+            }
+
+            const confirmMsg = updates.map(u => {
+                const name = master[u.code] ? master[u.code].name : u.code;
+                return `${name}: ${u.systemStock} → ${u.actualStock} (${u.diff > 0 ? '+' : ''}${u.diff})`;
+            }).join('\n');
+
+            if (!confirm(`以下の商品の在庫を更新しますか？\n\n${confirmMsg}`)) {
+                return;
+            }
+
+            showToast('🔄 棚卸し結果を反映しています...', 'info', true);
+
+            // 在庫を更新
+            updates.forEach(u => {
+                if (!stockData[u.code]) {
+                    stockData[u.code] = { stock: 0, safeStock: 10 };
+                }
+                stockData[u.code].stock = u.actualStock;
+
+                // 履歴に追加
+                const diff = u.diff;
+                const type = diff > 0 ? 'in' : 'out';
+                addHistory(type, u.code, Math.abs(diff), '棚卸し調整');
+            });
+
+            localStorage.setItem('omamori_stock', JSON.stringify(stockData));
+
+            // APIに保存
+            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+                try {
+                    await saveStockDataToApi(master, stockData);
+                } catch (e) {
+                    console.error('棚卸しAPI保存エラー:', e);
+                }
+            }
+
+            renderStockTable();
+            checkAlerts();
+            updateStats();
+            renderInventoryTable();
+            showToast('✅ 棚卸し結果を反映しました', 'success');
+        }
+
+        function resetInventory() {
+            renderInventoryTable();
+            showToast('棚卸し入力をリセットしました', 'info');
+        }
+
+        function exportInventoryCSV() {
+            const now = new Date();
+            let csv = '\uFEFF';
+            csv += `棚卸し日: ${now.toLocaleDateString('ja-JP')}\n`;
+            csv += '商品名,商品コード,システム在庫,実在庫,差異\n';
+
+            document.querySelectorAll('.inventory-input').forEach(input => {
+                const code = input.dataset.code;
+                const name = master[code] ? master[code].name : code;
+                const systemStock = stockData[code] ? stockData[code].stock : 0;
+                const actualStock = parseInt(input.value) || 0;
+                const diff = actualStock - systemStock;
+                csv += `${name},${code},${systemStock},${actualStock},${diff}\n`;
+            });
+
+            downloadFile(csv, `omamori_inventory_${formatDateForFilename(now)}.csv`, 'text/csv;charset=utf-8');
+            showToast('棚卸しCSVをダウンロードしました', 'success');
+        }
 
         // 履歴追加（内部関数）
         function addHistory(type, productCode, quantity, note) {
