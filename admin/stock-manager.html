@@ -1148,32 +1148,38 @@
                 
                 // 分納明細のHTMLを生成
                 let deliveriesHtml = '<div class="delivery-list" id="deliveries-' + code + '">';
-                if (order.deliveries && order.deliveries.length > 0) {
-                    order.deliveries.forEach((d, idx) => {
-                        deliveriesHtml += `
-                            <div class="delivery-item" data-index="${idx}">
-                                <input type="number" 
-                                       class="delivery-qty" 
-                                       value="${d.quantity || 0}" 
-                                       min="0"
-                                       placeholder="数量"
-                                       onchange="onDeliveryChange('${code}')">個
-                                <input type="date" 
-                                       class="delivery-date" 
-                                       value="${d.date || ''}"
-                                       onchange="onDeliveryChange('${code}')">
-                                <button class="btn-remove" onclick="removeDelivery('${code}', ${idx})" title="削除">×</button>
-                            </div>
-                        `;
-                    });
+                if (order.ordered) {
+                    // 発注済みの場合のみ分納明細を表示
+                    if (order.deliveries && order.deliveries.length > 0) {
+                        order.deliveries.forEach((d, idx) => {
+                            deliveriesHtml += `
+                                <div class="delivery-item" data-index="${idx}">
+                                    <input type="number" 
+                                           class="delivery-qty" 
+                                           value="${d.quantity || 0}" 
+                                           min="0"
+                                           placeholder="数量"
+                                           onchange="onDeliveryChange('${code}')">個
+                                    <input type="date" 
+                                           class="delivery-date" 
+                                           value="${d.date || ''}"
+                                           onchange="onDeliveryChange('${code}')">
+                                    <button class="btn-remove" onclick="removeDelivery('${code}', ${idx})" title="削除">×</button>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        deliveriesHtml += '<div class="no-delivery">分納なし</div>';
+                    }
+                    deliveriesHtml += `
+                        <button class="btn-add-delivery" onclick="addDelivery('${code}')">
+                            ➕ 分納を追加
+                        </button>`;
                 } else {
-                    deliveriesHtml += '<div class="no-delivery">分納なし</div>';
+                    // 未発注の場合は何も表示しない
+                    deliveriesHtml += '<div class="no-delivery" style="color:#bbb;">-</div>';
                 }
-                deliveriesHtml += `
-                    <button class="btn-add-delivery" onclick="addDelivery('${code}')">
-                        ➕ 分納を追加
-                    </button>
-                </div>`;
+                deliveriesHtml += '</div>';
                 
                 row.innerHTML = `
                     <td class="product-name-cell">
@@ -1256,13 +1262,13 @@
             }
             orderData[code].ordered = isOrdered;
             
-            // 金額を更新
-            const totalQty = getTotalQuantity(orderData[code].deliveries);
-            const unitPrice = master[code].unitPrice || 0;
-            const amount = isOrdered && totalQty > 0 ? unitPrice * totalQty : 0;
-            document.getElementById(`order-amount-${code}`).textContent = '¥' + amount.toLocaleString();
+            // 発注済みに変更した際、分納が空なら自動で分1件追加
+            if (isOrdered && (!orderData[code].deliveries || orderData[code].deliveries.length === 0)) {
+                orderData[code].deliveries = [{ quantity: 0, date: '' }];
+            }
             
-            updateTotalAmount();
+            // テーブルを再描画して分納明細の表示/非表示を切り替え
+            renderOrderTable();
         }
         
         // 発注フィルター
@@ -2352,7 +2358,8 @@
 
         function renderOrderingItems(container, isShortage) {
             const items = orderingItems.filter(item => item.isShortage === isShortage);
-            let html = '<table class="data-table"><thead><tr>';
+            let html = '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px;padding:0 4px;">';
+            html += '<table class="data-table" style="min-width:700px;"><thead><tr>';
             html += '<th>商品名</th><th>現在庫</th><th>安心在庫</th><th>不足数</th><th>発注数</th><th>単価</th><th>金額</th><th>発注先</th>';
             if (!isShortage) html += '<th>削除</th>';
             html += '</tr></thead><tbody>';
@@ -2373,7 +2380,7 @@
                 html += '</tr>';
             });
 
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
             container.innerHTML = items.length > 0 ? html : (isShortage ? '' : '<p style="color:#999;padding:8px;">追加発注商品はありません</p>');
         }
 
