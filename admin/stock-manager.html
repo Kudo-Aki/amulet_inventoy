@@ -531,6 +531,7 @@
             <div class="tab" onclick="switchTab('history')">📋 履歴</div>
             <div class="tab" onclick="switchTab('report')">📊 レポート</div>
             <div class="tab" onclick="switchTab('inventory')">📝 棚卸し</div>
+            <div class="tab" onclick="switchTab('ordering')">🛒 発注準備</div>
         </div>
 
         <!-- 在庫設定タブ -->
@@ -724,6 +725,44 @@
             </div>
         </div>
 
+        <!-- 発注準備タブ -->
+        <div id="tab-ordering" class="tab-content">
+            <div class="section">
+                <h2>🛒 発注準備</h2>
+                <div class="info-box">
+                    <strong>💡 使い方:</strong><br>
+                    ・安心在庫を下回った商品が自動でリストアップされます<br>
+                    ・発注数量を確認・調整して「見積依頼メール作成」でGmailの下書きを作成できます<br>
+                    ・「起案書作成」でスプレッドシートの起案書を自動生成し、PDFも作成されます
+                </div>
+
+                <div id="ordering-list">
+                    <h3 style="color:#8B0000;margin:16px 0 8px;">⚠️ 在庫不足商品（発注が必要）</h3>
+                    <div id="ordering-shortage-list"></div>
+
+                    <h3 style="color:#333;margin:24px 0 8px;">➕ 追加発注商品</h3>
+                    <div style="margin-bottom:12px;">
+                        <select id="ordering-add-product" style="padding:8px;border-radius:4px;border:1px solid #ddd;">
+                            <option value="">商品を選択...</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="addToOrderList()" style="margin-left:8px;">➕ 追加</button>
+                    </div>
+                    <div id="ordering-additional-list"></div>
+                </div>
+
+                <div style="margin-top:20px;padding:16px;background:#fff8e1;border-radius:8px;border:1px solid #ffc107;">
+                    <h3 style="color:#f57f17;margin-bottom:12px;">📊 発注サマリー</h3>
+                    <div id="ordering-summary"></div>
+                </div>
+
+                <div class="button-row" style="margin-top:20px;">
+                    <button class="btn btn-primary" onclick="createQuotationEmail()" style="background:#1a73e8;">✉️ 見積依頼メール作成</button>
+                    <button class="btn btn-primary" onclick="createKianDocument()">📄 起案書作成</button>
+                </div>
+                <div id="ordering-result" style="margin-top:16px;"></div>
+            </div>
+        </div>
+
         <a href="index.html" class="back-link">← 管理メニューに戻る</a>
     </div>
 
@@ -870,6 +909,10 @@
             // 棚卸しタブの初期化
             if (tabName === 'inventory') {
                 initInventoryTab();
+            }
+            // 発注準備タブの初期化
+            if (tabName === 'ordering') {
+                initOrderingTab();
             }
         }
 
@@ -2252,6 +2295,280 @@
 
             downloadFile(csv, `omamori_inventory_${formatDateForFilename(now)}.csv`, 'text/csv;charset=utf-8');
             showToast('棚卸しCSVをダウンロードしました', 'success');
+        }
+
+        // ======== 発注準備タブ ========
+        let orderingItems = []; // 発注準備リスト
+
+        function initOrderingTab() {
+            orderingItems = [];
+            const shortageList = document.getElementById('ordering-shortage-list');
+            const additionalList = document.getElementById('ordering-additional-list');
+            const addSelect = document.getElementById('ordering-add-product');
+            shortageList.innerHTML = '';
+            additionalList.innerHTML = '';
+
+            // 在庫不足商品を自動リストアップ
+            Object.keys(master).forEach(code => {
+                const stock = stockData[code] ? stockData[code].stock : 0;
+                const safeStock = stockData[code] ? stockData[code].safeStock : 0;
+                if (safeStock > 0 && stock < safeStock) {
+                    const shortage = safeStock - stock;
+                    const boxQty = master[code].quantity || 1;
+                    const recommended = Math.ceil(shortage / boxQty) * boxQty;
+                    orderingItems.push({
+                        code: code,
+                        name: master[code].name,
+                        currentStock: stock,
+                        safeStock: safeStock,
+                        shortage: shortage,
+                        quantity: recommended,
+                        unitPrice: master[code].unitPrice || 0,
+                        supplier: master[code].supplier || '',
+                        contact: master[code].contact || '',
+                        email: master[code].email || '',
+                        isShortage: true
+                    });
+                }
+            });
+
+            // 不足商品の表示
+            if (orderingItems.length === 0) {
+                shortageList.innerHTML = '<p style="color:#4caf50;padding:12px;">✅ 全ての商品が安心在庫以上です。発注の必要はありません。</p>';
+            } else {
+                renderOrderingItems(shortageList, true);
+            }
+
+            // 追加発注用のセレクトボックスを更新
+            addSelect.innerHTML = '<option value="">商品を選択...</option>';
+            Object.keys(master).forEach(code => {
+                if (!orderingItems.find(item => item.code === code)) {
+                    addSelect.innerHTML += `<option value="${code}">${master[code].name} (${code})</option>`;
+                }
+            });
+
+            updateOrderingSummary();
+        }
+
+        function renderOrderingItems(container, isShortage) {
+            const items = orderingItems.filter(item => item.isShortage === isShortage);
+            let html = '<table class="data-table"><thead><tr>';
+            html += '<th>商品名</th><th>現在庫</th><th>安心在庫</th><th>不足数</th><th>発注数</th><th>単価</th><th>金額</th><th>発注先</th>';
+            if (!isShortage) html += '<th>削除</th>';
+            html += '</tr></thead><tbody>';
+
+            items.forEach((item, idx) => {
+                const globalIdx = orderingItems.indexOf(item);
+                const amount = item.quantity * item.unitPrice;
+                html += `<tr>`;
+                html += `<td><strong>${item.name}</strong><br><small style="color:#666;">${item.code}</small></td>`;
+                html += `<td style="text-align:center;">${item.currentStock}</td>`;
+                html += `<td style="text-align:center;">${item.safeStock}</td>`;
+                html += `<td style="text-align:center;color:#d32f2f;font-weight:bold;">${item.shortage || '-'}</td>`;
+                html += `<td><input type="number" min="1" value="${item.quantity}" style="width:80px;padding:6px;text-align:center;border:1px solid #ddd;border-radius:4px;" onchange="updateOrderingQuantity(${globalIdx}, this.value)"></td>`;
+                html += `<td style="text-align:right;">¥${item.unitPrice.toLocaleString()}</td>`;
+                html += `<td style="text-align:right;font-weight:bold;">¥${amount.toLocaleString()}</td>`;
+                html += `<td><small>${item.supplier || '<span style="color:#999;">未設定</span>'}</small></td>`;
+                if (!isShortage) html += `<td><button class="btn btn-secondary" onclick="removeFromOrderList(${globalIdx})" style="padding:4px 8px;font-size:0.8rem;">✖</button></td>`;
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = items.length > 0 ? html : (isShortage ? '' : '<p style="color:#999;padding:8px;">追加発注商品はありません</p>');
+        }
+
+        function updateOrderingQuantity(idx, value) {
+            orderingItems[idx].quantity = parseInt(value) || 0;
+            updateOrderingSummary();
+            // リストを再描画
+            renderOrderingItems(document.getElementById('ordering-shortage-list'), true);
+            renderOrderingItems(document.getElementById('ordering-additional-list'), false);
+        }
+
+        function addToOrderList() {
+            const select = document.getElementById('ordering-add-product');
+            const code = select.value;
+            if (!code) return;
+
+            const stock = stockData[code] ? stockData[code].stock : 0;
+            const safeStock = stockData[code] ? stockData[code].safeStock : 0;
+            const boxQty = master[code].quantity || 1;
+
+            orderingItems.push({
+                code: code,
+                name: master[code].name,
+                currentStock: stock,
+                safeStock: safeStock,
+                shortage: 0,
+                quantity: boxQty,
+                unitPrice: master[code].unitPrice || 0,
+                supplier: master[code].supplier || '',
+                contact: master[code].contact || '',
+                email: master[code].email || '',
+                isShortage: false
+            });
+
+            // セレクトから削除
+            select.querySelector(`option[value="${code}"]`).remove();
+            select.value = '';
+
+            renderOrderingItems(document.getElementById('ordering-additional-list'), false);
+            updateOrderingSummary();
+        }
+
+        function removeFromOrderList(idx) {
+            const item = orderingItems[idx];
+            orderingItems.splice(idx, 1);
+
+            // セレクトに戻す
+            const select = document.getElementById('ordering-add-product');
+            select.innerHTML += `<option value="${item.code}">${item.name} (${item.code})</option>`;
+
+            renderOrderingItems(document.getElementById('ordering-additional-list'), false);
+            updateOrderingSummary();
+        }
+
+        function updateOrderingSummary() {
+            const summary = document.getElementById('ordering-summary');
+            if (orderingItems.length === 0) {
+                summary.innerHTML = '<p style="color:#999;">発注対象商品がありません</p>';
+                return;
+            }
+
+            // 発注先ごとにグループ化
+            const bySupplier = {};
+            orderingItems.forEach(item => {
+                const supplier = item.supplier || '発注先未設定';
+                if (!bySupplier[supplier]) {
+                    bySupplier[supplier] = { items: [], total: 0, contact: item.contact, email: item.email };
+                }
+                bySupplier[supplier].items.push(item);
+                bySupplier[supplier].total += item.quantity * item.unitPrice;
+            });
+
+            let html = '';
+            let grandTotal = 0;
+            for (const supplier in bySupplier) {
+                const group = bySupplier[supplier];
+                grandTotal += group.total;
+                html += `<div style="margin-bottom:12px;padding:12px;background:white;border-radius:6px;">`;
+                html += `<strong>🏢 ${supplier}</strong>`;
+                if (group.email) html += ` <small style="color:#666;">(${group.email})</small>`;
+                html += '<ul style="margin:8px 0 4px 20px;">';
+                group.items.forEach(item => {
+                    html += `<li>${item.name}: ${item.quantity}個 × ¥${item.unitPrice.toLocaleString()} = <strong>¥${(item.quantity * item.unitPrice).toLocaleString()}</strong></li>`;
+                });
+                html += '</ul>';
+                html += `<div style="text-align:right;font-weight:bold;color:#8B0000;">小計: ¥${group.total.toLocaleString()}（税込¥${Math.floor(group.total * 1.1).toLocaleString()}）</div>`;
+                html += '</div>';
+            }
+            html += `<div style="text-align:right;font-size:1.2rem;font-weight:bold;color:#8B0000;margin-top:8px;border-top:2px solid #8B0000;padding-top:8px;">`;
+            html += `合計: ¥${grandTotal.toLocaleString()}（税込¥${Math.floor(grandTotal * 1.1).toLocaleString()}）`;
+            html += '</div>';
+
+            summary.innerHTML = html;
+        }
+
+        async function createQuotationEmail() {
+            if (orderingItems.length === 0) {
+                showToast('発注対象商品がありません', 'error');
+                return;
+            }
+
+            // 発注先ごとにグループ化
+            const bySupplier = {};
+            orderingItems.forEach(item => {
+                const supplier = item.supplier || '発注先未設定';
+                if (!bySupplier[supplier]) {
+                    bySupplier[supplier] = { items: [], contact: item.contact, email: item.email };
+                }
+                bySupplier[supplier].items.push(item);
+            });
+
+            // メールアドレス未設定の発注先があるかチェック
+            const noEmail = Object.keys(bySupplier).filter(s => !bySupplier[s].email);
+            if (noEmail.length > 0) {
+                if (!confirm(`以下の発注先にメールアドレスが設定されていません。\n\n${noEmail.join('\n')}\n\n商品マスタでメールアドレスを設定してください。\nメールアドレスなしで下書きを作成しますか？`)) {
+                    return;
+                }
+            }
+
+            const resultDiv = document.getElementById('ordering-result');
+            resultDiv.innerHTML = '<div style="padding:16px;background:#e3f2fd;border-radius:8px;"><strong>🔄 見積依頼メールの下書きを作成中...</strong></div>';
+
+            try {
+                const orderData = {
+                    suppliers: bySupplier
+                };
+                const response = await apiPost('createQuotationEmail', orderData);
+                if (response && response.success) {
+                    resultDiv.innerHTML = `<div style="padding:16px;background:#e8f5e9;border-radius:8px;">
+                        <strong>✅ 見積依頼メールの下書きを作成しました！</strong><br>
+                        <p style="margin-top:8px;">${response.message || ''}</p>
+                        <p style="margin-top:8px;color:#666;">Gmailの下書きフォルダを確認してください。</p>
+                    </div>`;
+                    showToast('メール下書きを作成しました', 'success');
+                } else {
+                    throw new Error(response ? response.error : 'APIエラー');
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div style="padding:16px;background:#ffebee;border-radius:8px;">
+                    <strong>❌ エラー:</strong> ${error.message}
+                </div>`;
+                showToast('メール下書きの作成に失敗しました', 'error');
+            }
+        }
+
+        async function createKianDocument() {
+            if (orderingItems.length === 0) {
+                showToast('発注対象商品がありません', 'error');
+                return;
+            }
+
+            // 発注先ごとにグループ化
+            const bySupplier = {};
+            orderingItems.forEach(item => {
+                const supplier = item.supplier || '発注先未設定';
+                if (!bySupplier[supplier]) {
+                    bySupplier[supplier] = { items: [], contact: item.contact, email: item.email };
+                }
+                bySupplier[supplier].items.push(item);
+            });
+
+            const resultDiv = document.getElementById('ordering-result');
+            resultDiv.innerHTML = '<div style="padding:16px;background:#e3f2fd;border-radius:8px;"><strong>🔄 起案書を作成中...</strong></div>';
+
+            try {
+                const orderData = {
+                    suppliers: bySupplier
+                };
+                const response = await apiPost('createKianDocument', orderData);
+                if (response && response.success) {
+                    let resultHtml = `<div style="padding:16px;background:#e8f5e9;border-radius:8px;">
+                        <strong>✅ 起案書を作成しました！</strong>`;
+                    if (response.documents) {
+                        resultHtml += '<ul style="margin:8px 0 0 20px;">';
+                        response.documents.forEach(doc => {
+                            resultHtml += `<li><a href="${doc.url}" target="_blank" style="color:#1a73e8;">📄 ${doc.name}</a>`;
+                            if (doc.pdfUrl) {
+                                resultHtml += ` | <a href="${doc.pdfUrl}" target="_blank" style="color:#d32f2f;">📄 PDF</a>`;
+                            }
+                            resultHtml += '</li>';
+                        });
+                        resultHtml += '</ul>';
+                    }
+                    resultHtml += '</div>';
+                    resultDiv.innerHTML = resultHtml;
+                    showToast('起案書を作成しました', 'success');
+                } else {
+                    throw new Error(response ? response.error : 'APIエラー');
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div style="padding:16px;background:#ffebee;border-radius:8px;">
+                    <strong>❌ エラー:</strong> ${error.message}
+                </div>`;
+                showToast('起案書の作成に失敗しました', 'error');
+            }
         }
 
         // 履歴追加（内部関数）

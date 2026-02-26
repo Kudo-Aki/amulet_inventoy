@@ -67,7 +67,7 @@
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 16px;
-            min-width: 600px;
+            min-width: 900px;
         }
         th, td {
             padding: 10px;
@@ -103,6 +103,15 @@
         }
         .input-price {
             width: 90px;
+        }
+        .input-supplier {
+            min-width: 120px;
+        }
+        .input-contact {
+            min-width: 100px;
+        }
+        .input-email {
+            min-width: 160px;
         }
         .btn {
             padding: 10px 20px;
@@ -143,7 +152,7 @@
         }
         .add-form {
             display: grid;
-            grid-template-columns: 1fr 1fr 80px 100px 80px 80px auto;
+            grid-template-columns: 1fr 1fr 80px 100px 80px 80px 1fr 1fr 1fr auto;
             gap: 10px;
             align-items: end;
             margin-top: 16px;
@@ -217,7 +226,8 @@
             <h2>現在の商品マスタ</h2>
             <div class="info-box">
                 商品コードは英大文字のみ使用できます。入数は1箱あたりのお守りの個数です。<br>
-                <strong>💰 単価（税込）</strong>は発注時の請求金額計算に使用されます。
+                <strong>💰 単価（税込）</strong>は発注時の請求金額計算に使用されます。<br>
+                <strong>📧 発注先・担当者・メールアドレス</strong>は見積依頼メールの自動作成に使用されます。
             </div>
             <div class="table-container">
                 <table id="master-table">
@@ -227,6 +237,9 @@
                             <th>商品名</th>
                             <th>入数</th>
                             <th>単価(税込)</th>
+                            <th>発注先</th>
+                            <th>担当者</th>
+                            <th>メールアドレス</th>
                             <th>操作</th>
                         </tr>
                     </thead>
@@ -261,6 +274,18 @@
                     <input type="number" id="new-safe-stock" placeholder="10" min="0" class="input-safe-stock">
                 </div>
                 <div>
+                    <label>発注先</label>
+                    <input type="text" id="new-supplier" placeholder="株式会社○○" class="input-supplier">
+                </div>
+                <div>
+                    <label>担当者</label>
+                    <input type="text" id="new-contact" placeholder="山田太郎" class="input-contact">
+                </div>
+                <div>
+                    <label>メールアドレス</label>
+                    <input type="email" id="new-email" placeholder="example@co.jp" class="input-email">
+                </div>
+                <div>
                     <button class="btn btn-success" onclick="addProduct()">追加</button>
                 </div>
             </div>
@@ -288,16 +313,16 @@
     <script>
         // デフォルトマスタ（単価を追加）
         const DEFAULT_MASTER = {
-            'HEALTH': { name: '健康守り', quantity: 50, unitPrice: 0 },
-            'MONEY': { name: '金運守り', quantity: 100, unitPrice: 0 },
-            'LOVE': { name: '縁結び守り', quantity: 80, unitPrice: 0 },
-            'TRAFFIC': { name: '交通安全守り', quantity: 60, unitPrice: 0 },
-            'STUDY': { name: '学業成就守り', quantity: 70, unitPrice: 0 },
-            'FAMILY': { name: '家内安全守り', quantity: 50, unitPrice: 0 },
-            'BUSINESS': { name: '商売繁盛守り', quantity: 60, unitPrice: 0 },
-            'CHILD': { name: '子授け守り', quantity: 40, unitPrice: 0 },
-            'RECOVERY': { name: '病気平癒守り', quantity: 50, unitPrice: 0 },
-            'LUCK': { name: '開運守り', quantity: 80, unitPrice: 0 }
+            'HEALTH': { name: '健康守り', quantity: 50, unitPrice: 0, supplier: '', contact: '', email: '' },
+            'MONEY': { name: '金運守り', quantity: 100, unitPrice: 0, supplier: '', contact: '', email: '' },
+            'LOVE': { name: '縁結び守り', quantity: 80, unitPrice: 0, supplier: '', contact: '', email: '' },
+            'TRAFFIC': { name: '交通安全守り', quantity: 60, unitPrice: 0, supplier: '', contact: '', email: '' },
+            'STUDY': { name: '学業成就守り', quantity: 70, unitPrice: 0, supplier: '', contact: '', email: '' },
+            'FAMILY': { name: '家内安全守り', quantity: 50, unitPrice: 0, supplier: '', contact: '', email: '' },
+            'BUSINESS': { name: '商売繁盛守り', quantity: 60, unitPrice: 0, supplier: '', contact: '', email: '' },
+            'CHILD': { name: '子授け守り', quantity: 40, unitPrice: 0, supplier: '', contact: '', email: '' },
+            'RECOVERY': { name: '病気平癒守り', quantity: 50, unitPrice: 0, supplier: '', contact: '', email: '' },
+            'LUCK': { name: '開運守り', quantity: 80, unitPrice: 0, supplier: '', contact: '', email: '' }
         };
 
         let master = {};
@@ -320,6 +345,9 @@
                             if (master[code].unitPrice === undefined) {
                                 master[code].unitPrice = 0;
                             }
+                            if (master[code].supplier === undefined) master[code].supplier = '';
+                            if (master[code].contact === undefined) master[code].contact = '';
+                            if (master[code].email === undefined) master[code].email = '';
                         });
                         return;
                     }
@@ -355,11 +383,17 @@
                 const product = master[code];
                 const unitPrice = product.unitPrice || 0;
                 const row = document.createElement('tr');
+                const supplier = product.supplier || '';
+                const contact = product.contact || '';
+                const email = product.email || '';
                 row.innerHTML = `
                     <td><input type="text" value="${code}" data-original="${code}" onchange="updateCode(this)" class="input-code"></td>
                     <td><input type="text" value="${product.name}" onchange="updateName('${code}', this.value)" class="input-name"></td>
                     <td><input type="number" value="${product.quantity}" min="1" onchange="updateQuantity('${code}', this.value)" class="input-quantity"></td>
                     <td><input type="number" value="${unitPrice}" min="0" onchange="updatePrice('${code}', this.value)" class="input-price"></td>
+                    <td><input type="text" value="${supplier}" onchange="updateSupplier('${code}', this.value)" class="input-supplier"></td>
+                    <td><input type="text" value="${contact}" onchange="updateContact('${code}', this.value)" class="input-contact"></td>
+                    <td><input type="email" value="${email}" onchange="updateEmail('${code}', this.value)" class="input-email"></td>
                     <td><button class="btn btn-danger btn-small" onclick="deleteProduct('${code}')">削除</button></td>
                 `;
                 tbody.appendChild(row);
@@ -410,6 +444,30 @@
             }
         }
 
+        // 発注先更新
+        function updateSupplier(code, supplier) {
+            if (master[code]) {
+                master[code].supplier = supplier;
+                showToast('発注先を更新しました', 'success');
+            }
+        }
+
+        // 担当者更新
+        function updateContact(code, contact) {
+            if (master[code]) {
+                master[code].contact = contact;
+                showToast('担当者を更新しました', 'success');
+            }
+        }
+
+        // メールアドレス更新
+        function updateEmail(code, email) {
+            if (master[code]) {
+                master[code].email = email;
+                showToast('メールアドレスを更新しました', 'success');
+            }
+        }
+
         // 商品追加
         async function addProduct() {
             let code = document.getElementById('new-code').value.toUpperCase().replace(/[^A-Z]/g, '');
@@ -418,6 +476,9 @@
             const unitPrice = parseInt(document.getElementById('new-price').value) || 0;
             const stock = parseInt(document.getElementById('new-stock').value) || 0;
             const safeStock = parseInt(document.getElementById('new-safe-stock').value) || 10;
+            const supplier = document.getElementById('new-supplier').value.trim();
+            const contact = document.getElementById('new-contact').value.trim();
+            const email = document.getElementById('new-email').value.trim();
 
             if (!code) {
                 showToast('商品コードを入力してください', 'error');
@@ -433,7 +494,7 @@
             }
 
             // マスタに追加
-            master[code] = { name, quantity, unitPrice };
+            master[code] = { name, quantity, unitPrice, supplier, contact, email };
             
             // ローカルに保存
             localStorage.setItem('omamori_master', JSON.stringify(master));
@@ -458,6 +519,9 @@
                         name: name,
                         quantity: quantity,
                         unitPrice: unitPrice,
+                        supplier: supplier,
+                        contact: contact,
+                        email: email,
                         stock: stock,
                         safeStock: safeStock,
                         ordered: false,
@@ -483,27 +547,17 @@
             document.getElementById('new-price').value = '';
             document.getElementById('new-stock').value = '';
             document.getElementById('new-safe-stock').value = '';
+            document.getElementById('new-supplier').value = '';
+            document.getElementById('new-contact').value = '';
+            document.getElementById('new-email').value = '';
         }
         
         // 商品をスプレッドシートに保存
         async function saveProductToSpreadsheet(productData) {
-            const apiUrl = localStorage.getItem('omamori_api_url');
-            if (!apiUrl) throw new Error('API URLが設定されていません');
-            
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify({
-                    action: 'saveProduct',
-                    data: productData
-                })
-            });
-            
-            const result = await response.json();
-            if (!result.success) {
-                throw new Error(result.error || '保存に失敗しました');
+            if (typeof apiPost === 'function') {
+                return await apiPost('saveProduct', { data: productData });
             }
-            return result;
+            throw new Error('APIが利用できません');
         }
 
         // 商品削除
