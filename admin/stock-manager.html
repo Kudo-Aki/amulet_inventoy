@@ -2314,11 +2314,13 @@
             shortageList.innerHTML = '';
             additionalList.innerHTML = '';
 
-            // 在庫不足商品を自動リストアップ
+            // 在庫不足かつ未発注の商品を自動リストアップ
             Object.keys(master).forEach(code => {
                 const stock = stockData[code] ? stockData[code].stock : 0;
                 const safeStock = stockData[code] ? stockData[code].safeStock : 0;
-                if (safeStock > 0 && stock < safeStock) {
+                const order = orderData[code];
+                const isOrdered = order && order.ordered;
+                if (safeStock > 0 && stock < safeStock && !isOrdered) {
                     const shortage = safeStock - stock;
                     const boxQty = master[code].quantity || 1;
                     const recommended = Math.ceil(shortage / boxQty) * boxQty;
