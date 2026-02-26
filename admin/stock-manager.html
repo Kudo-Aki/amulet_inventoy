@@ -2437,14 +2437,21 @@
 
         function updateOrderingSummary() {
             const summary = document.getElementById('ordering-summary');
-            if (orderingItems.length === 0) {
-                summary.innerHTML = '<p style="color:#999;">発注対象商品がありません</p>';
+            
+            // 未発注の商品のみフィルタリング
+            const unorderedItems = orderingItems.filter(item => {
+                const order = orderData[item.code];
+                return !order || !order.ordered;
+            });
+            
+            if (unorderedItems.length === 0) {
+                summary.innerHTML = '<p style="color:#999;">未発注の商品がありません（全て発注済みです）</p>';
                 return;
             }
 
             // 発注先ごとにグループ化
             const bySupplier = {};
-            orderingItems.forEach(item => {
+            unorderedItems.forEach(item => {
                 const supplier = item.supplier || '発注先未設定';
                 if (!bySupplier[supplier]) {
                     bySupplier[supplier] = { items: [], total: 0, contact: item.contact, email: item.email };
