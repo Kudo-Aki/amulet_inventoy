@@ -2475,11 +2475,11 @@
                     html += `<li>${item.name}: ${item.quantity}個 × ¥${item.unitPrice.toLocaleString()} = <strong>¥${(item.quantity * item.unitPrice).toLocaleString()}</strong></li>`;
                 });
                 html += '</ul>';
-                html += `<div style="text-align:right;font-weight:bold;color:#8B0000;">小計: ¥${group.total.toLocaleString()}（税込¥${Math.floor(group.total * 1.1).toLocaleString()}）</div>`;
+                html += `<div style="text-align:right;font-weight:bold;color:#8B0000;">小計: ¥${group.total.toLocaleString()}</div>`;
                 html += '</div>';
             }
             html += `<div style="text-align:right;font-size:1.2rem;font-weight:bold;color:#8B0000;margin-top:8px;border-top:2px solid #8B0000;padding-top:8px;">`;
-            html += `合計: ¥${grandTotal.toLocaleString()}（税込¥${Math.floor(grandTotal * 1.1).toLocaleString()}）`;
+            html += `合計: ¥${grandTotal.toLocaleString()}`;
             html += '</div>';
 
             summary.innerHTML = html;
