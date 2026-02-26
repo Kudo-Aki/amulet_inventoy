@@ -2477,14 +2477,19 @@
         }
 
         async function createQuotationEmail() {
-            if (orderingItems.length === 0) {
-                showToast('発注対象商品がありません', 'error');
+            // 未発注の商品のみフィルタリング
+            const unorderedItems = orderingItems.filter(item => {
+                const order = orderData[item.code];
+                return !order || !order.ordered;
+            });
+            if (unorderedItems.length === 0) {
+                showToast('未発注の商品がありません', 'error');
                 return;
             }
 
             // 発注先ごとにグループ化
             const bySupplier = {};
-            orderingItems.forEach(item => {
+            unorderedItems.forEach(item => {
                 const supplier = item.supplier || '発注先未設定';
                 if (!bySupplier[supplier]) {
                     bySupplier[supplier] = { items: [], contact: item.contact, email: item.email };
@@ -2527,14 +2532,19 @@
         }
 
         async function createKianDocument() {
-            if (orderingItems.length === 0) {
-                showToast('発注対象商品がありません', 'error');
+            // 未発注の商品のみフィルタリング
+            const unorderedItems = orderingItems.filter(item => {
+                const order = orderData[item.code];
+                return !order || !order.ordered;
+            });
+            if (unorderedItems.length === 0) {
+                showToast('未発注の商品がありません', 'error');
                 return;
             }
 
             // 発注先ごとにグループ化
             const bySupplier = {};
-            orderingItems.forEach(item => {
+            unorderedItems.forEach(item => {
                 const supplier = item.supplier || '発注先未設定';
                 if (!bySupplier[supplier]) {
                     bySupplier[supplier] = { items: [], contact: item.contact, email: item.email };
