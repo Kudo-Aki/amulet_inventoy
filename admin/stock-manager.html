@@ -1487,13 +1487,23 @@
                 
                 if (stock.stock < stock.safeStock) {
                     const shortage = stock.safeStock - stock.stock;
+                    // 発注済みの場合、初回分納の納期・数量を取得
+                    let firstDeliveryQty = null;
+                    let firstDeliveryDate = null;
+                    if (order.ordered && order.deliveries && order.deliveries.length > 0) {
+                        const firstD = order.deliveries[0];
+                        firstDeliveryQty = firstD.quantity || null;
+                        firstDeliveryDate = firstD.date || null;
+                    }
                     alertItems.push({
                         name: product.name,
                         code: code,
                         current: stock.stock,
                         safeStock: stock.safeStock,
                         shortage: shortage,
-                        ordered: order.ordered
+                        ordered: order.ordered,
+                        firstDeliveryQty: firstDeliveryQty,
+                        firstDeliveryDate: firstDeliveryDate
                     });
                 }
             });
@@ -1516,6 +1526,16 @@
                 alertItems.forEach(item => {
                     const div = document.createElement('div');
                     div.className = 'alert-item';
+                    // 発注済みの場合、初回分納の納期・数量情報を追加表示
+                    let deliveryInfo = '';
+                    if (item.ordered && (item.firstDeliveryQty || item.firstDeliveryDate)) {
+                        const qtyStr = item.firstDeliveryQty ? `${item.firstDeliveryQty}個` : '未定';
+                        const dateStr = item.firstDeliveryDate || '未定';
+                        deliveryInfo = `
+                            <div style="margin-top:4px;padding:4px 8px;background:#e8f5e9;border-radius:4px;font-size:0.85rem;color:#2e7d32;">
+                                📅 納期: ${dateStr}　📦 数量: ${qtyStr}
+                            </div>`;
+                    }
                     div.innerHTML = `
                         <div style="flex:1;">
                             <span class="product-name">${item.name}</span>
@@ -1528,6 +1548,7 @@
                                     ${item.ordered ? '📦 発注済み' : '⚠️ 未発注'}
                                 </span>
                             </div>
+                            ${deliveryInfo}
                         </div>
                     `;
                     alertList.appendChild(div);
