@@ -1217,8 +1217,19 @@ async function confirmStockUpdate() {
     
     // オーバーレイを表示
     showStockUpdateOverlay();
-    
+
     try {
+        // API有効時は、他の端末や Googleフォームからの更新を取り込んでから加減算する
+        // （この端末に残った古い在庫値でスプレッドシートを上書きしないため）
+        if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+            try {
+                await fetchStockData();
+                await fetchOrdersData();
+            } catch (e) {
+                console.error('最新在庫の取得に失敗（ローカルの値で続行）:', e);
+            }
+        }
+
         // 商品別に集計
         const summary = calculateSummary();
         const productCodes = Object.keys(summary);

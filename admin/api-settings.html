@@ -285,6 +285,58 @@
         .tab-content {
             display: none;
         }
+        /* Googleフォーム連携 */
+        .fi-status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .fi-status-item {
+            background: #f5f5f5;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 0.9rem;
+        }
+        .fi-status-item .label {
+            color: #666;
+            font-size: 0.8rem;
+        }
+        .fi-status-item .value {
+            font-weight: 600;
+            word-break: break-all;
+        }
+        .fi-status-item.ok .value { color: #2e7d32; }
+        .fi-status-item.ng .value { color: #c62828; }
+        .fi-form-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+        .fi-form-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .fi-form-card h3 {
+            margin-bottom: 8px;
+            color: #8B0000;
+        }
+        .fi-url {
+            word-break: break-all;
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+            min-height: 1.2em;
+        }
+        .fi-qr {
+            margin-top: 12px;
+            display: flex;
+            justify-content: center;
+        }
+        .btn-group a.btn {
+            text-decoration: none;
+            display: inline-block;
+        }
         .tab-content.active {
             display: block;
         }
@@ -372,6 +424,91 @@
             </div>
             
             <div id="test-result" class="hidden" style="margin-top: 16px;"></div>
+        </div>
+
+        <!-- Googleフォーム連携 -->
+        <div class="section" id="form-integration">
+            <h2>📮 Googleフォーム連携</h2>
+            <div class="info-box">
+                入荷・出荷を Googleフォームから登録すると、スプレッドシートの在庫・履歴・発注状況に自動で反映されます。<br>
+                入荷時は箱に貼るラベル（QR付き）の PDF が入力者宛にメールで届きます。アプリ側は次回の起動・更新時に反映されます。
+            </div>
+            <div id="fi-not-configured" class="warning-box">
+                API URL を設定して接続すると、ここにフォームの URL と状態が表示されます。<br>
+                GAS 側のセットアップ手順は下の「GAS 側のセットアップ手順」または
+                <a href="../docs/google_form_guide.md" target="_blank" rel="noopener">docs/google_form_guide.md</a> を参照してください。
+            </div>
+            <div id="fi-loading" class="info-box hidden">🔄 フォーム連携の状態を取得中...</div>
+            <div id="fi-error" class="error-box hidden"></div>
+            <div id="fi-content" class="hidden">
+                <div id="fi-status" class="fi-status-grid"></div>
+                <div class="fi-form-cards">
+                    <div class="fi-form-card">
+                        <h3>📥 入荷フォーム</h3>
+                        <p class="fi-url"><a id="fi-in-url" href="#" target="_blank" rel="noopener"></a></p>
+                        <div class="btn-group">
+                            <button class="btn btn-primary" onclick="openFormUrl('in')">フォームを開く</button>
+                            <button class="btn btn-info" onclick="toggleFormQr('in')">🔲 QRコード</button>
+                            <a id="fi-in-edit" class="btn btn-secondary" href="#" target="_blank" rel="noopener">編集画面</a>
+                        </div>
+                        <div id="fi-in-qr" class="fi-qr hidden"></div>
+                    </div>
+                    <div class="fi-form-card">
+                        <h3>📤 出荷フォーム</h3>
+                        <p class="fi-url"><a id="fi-out-url" href="#" target="_blank" rel="noopener"></a></p>
+                        <div class="btn-group">
+                            <button class="btn btn-primary" onclick="openFormUrl('out')">フォームを開く</button>
+                            <button class="btn btn-info" onclick="toggleFormQr('out')">🔲 QRコード</button>
+                            <a id="fi-out-edit" class="btn btn-secondary" href="#" target="_blank" rel="noopener">編集画面</a>
+                        </div>
+                        <div id="fi-out-qr" class="fi-qr hidden"></div>
+                    </div>
+                </div>
+                <div class="btn-group" style="margin-top: 16px;">
+                    <button class="btn btn-success" onclick="syncFormChoicesNow()">🔄 選択肢を同期（商品・入力者）</button>
+                    <button class="btn btn-info" onclick="reprocessPending()">📨 未処理の回答を再処理</button>
+                    <button class="btn btn-secondary" onclick="loadFormIntegration(true)">状態を更新</button>
+                </div>
+                <div id="fi-action-result" class="hidden" style="margin-top: 12px;"></div>
+                <p class="qr-instruction" style="text-align: left; margin-top: 12px;">
+                    入力者の追加・変更、通知先や署名の設定はスプレッドシートの「入力者」「設定」シートで行います
+                    （<a id="fi-ss-url" href="#" target="_blank" rel="noopener">スプレッドシートを開く</a>）。
+                    変更後は「選択肢を同期」を押してください（毎朝6時にも自動で同期されます）。
+                </p>
+            </div>
+            <details style="margin-top: 16px;">
+                <summary style="cursor: pointer; font-weight: 600; color: #8B0000;">GAS 側のセットアップ手順（初回のみ・PC推奨）</summary>
+                <ol class="step-list">
+                    <li>
+                        <strong>ファイルを追加</strong><br>
+                        Apps Script プロジェクトに、リポジトリの <code>gas/</code> フォルダにある
+                        FormIntegration.gs / LabelPdf.gs / LabelTemplate.gs / QRCode.gs / Tests.gs を同じ名前で追加し、
+                        Code.gs を <code>gas/Code.gs</code> の内容に更新します（doGet の委譲と署名の設定シート化）
+                    </li>
+                    <li>
+                        <strong>サービスの確認</strong><br>
+                        左メニュー「サービス」に Drive API（v2）が追加されていることを確認（起案書作成を使っていれば追加済み）
+                    </li>
+                    <li>
+                        <strong>setupFormIntegration を実行</strong><br>
+                        関数を選んで実行し、権限を承認します。設定・入力者・箱台帳シート、入荷/出荷フォーム、トリガー、ラベルテンプレートが作られます
+                    </li>
+                    <li>
+                        <strong>シートを記入</strong><br>
+                        「入力者」シートに 名前・メール・有効(TRUE)、「設定」シートに adminEmail と署名（orgName, senderName など）を記入し、
+                        syncFormChoices を実行します
+                    </li>
+                    <li>
+                        <strong>試し刷り</strong><br>
+                        test_sampleLabelPdf を実行して PDF をエーワン 31266 に印刷し、ズレがあれば「設定」シートの offsetX_mm / offsetY_mm で調整します
+                    </li>
+                    <li>
+                        <strong>新しいバージョンでデプロイ</strong><br>
+                        「デプロイを管理」→ 編集 → バージョン「新バージョン」→ デプロイ（URL は変わりません）。
+                        この画面の「状態を更新」でフォームが表示されれば完了です
+                    </li>
+                </ol>
+            </details>
         </div>
 
         <!-- セットアップ手順 -->
@@ -560,6 +697,9 @@
                 document.getElementById('qr-no-url').classList.remove('hidden');
                 document.getElementById('qr-code-container').classList.add('hidden');
             }
+
+            // フォーム連携の状態も更新
+            if (typeof loadFormIntegration === 'function') loadFormIntegration(false);
         }
         
         // ========================================
@@ -652,6 +792,175 @@
             // エラーは無視（スキャン中は常に発生する）
         }
         
+        // ========================================
+        // Googleフォーム連携
+        // ========================================
+
+        let formIntegrationData = null;
+
+        function escapeHtml(s) {
+            return String(s === undefined || s === null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        async function loadFormIntegration(showToastOnDone) {
+            const notConfigured = document.getElementById('fi-not-configured');
+            const loading = document.getElementById('fi-loading');
+            const errorBox = document.getElementById('fi-error');
+            const content = document.getElementById('fi-content');
+            if (!notConfigured) return;
+
+            if (typeof isApiEnabled !== 'function' || !isApiEnabled() || typeof apiGetFormConfig !== 'function') {
+                notConfigured.classList.remove('hidden');
+                content.classList.add('hidden');
+                return;
+            }
+
+            notConfigured.classList.add('hidden');
+            errorBox.classList.add('hidden');
+            loading.classList.remove('hidden');
+            try {
+                const res = await apiGetFormConfig();
+                loading.classList.add('hidden');
+                if (!res || !res.success) {
+                    throw new Error(res && res.error ? res.error : '取得に失敗しました');
+                }
+                formIntegrationData = res.data;
+                renderFormIntegration(res.data);
+                content.classList.remove('hidden');
+                if (showToastOnDone) showToast('フォーム連携の状態を更新しました', 'success');
+            } catch (e) {
+                loading.classList.add('hidden');
+                content.classList.add('hidden');
+                errorBox.innerHTML = '❌ フォーム連携の情報を取得できませんでした: ' + escapeHtml(e.message || e) +
+                    '<br>GAS に FormIntegration.gs などを追加し、「新しいバージョン」でデプロイされているか確認してください。';
+                errorBox.classList.remove('hidden');
+            }
+        }
+
+        function renderFormIntegration(data) {
+            const items = [
+                { label: 'セットアップ', value: data.setupDone ? '完了' : '未完了', ok: data.setupDone },
+                { label: 'フォーム送信トリガー', value: data.triggers && data.triggers.onFormSubmit ? '設定済み' : '未設定', ok: !!(data.triggers && data.triggers.onFormSubmit) },
+                { label: 'ラベルテンプレート', value: data.templateReady ? 'OK' : '未作成', ok: data.templateReady },
+                { label: '入力者', value: (data.staffCount || 0) + ' 人', ok: (data.staffCount || 0) > 0 },
+                { label: '商品', value: (data.productCount || 0) + ' 件', ok: (data.productCount || 0) > 0 },
+                { label: '通知先（管理者）', value: data.adminEmail || '未設定', ok: !!data.adminEmail }
+            ];
+            document.getElementById('fi-status').innerHTML = items.map(it =>
+                `<div class="fi-status-item ${it.ok ? 'ok' : 'ng'}"><div class="label">${escapeHtml(it.label)}</div><div class="value">${escapeHtml(it.value)}</div></div>`
+            ).join('');
+
+            setFormLink('in', data.inFormUrl, data.inFormEditUrl);
+            setFormLink('out', data.outFormUrl, data.outFormEditUrl);
+
+            const ssLink = document.getElementById('fi-ss-url');
+            if (data.spreadsheetUrl) {
+                ssLink.href = data.spreadsheetUrl;
+            }
+        }
+
+        function setFormLink(kind, url, editUrl) {
+            const link = document.getElementById(`fi-${kind}-url`);
+            const edit = document.getElementById(`fi-${kind}-edit`);
+            if (url) {
+                link.textContent = url;
+                link.href = url;
+            } else {
+                link.textContent = '未作成（GAS で setupFormIntegration を実行してください）';
+                link.removeAttribute('href');
+            }
+            if (editUrl) {
+                edit.href = editUrl;
+                edit.classList.remove('hidden');
+            } else {
+                edit.classList.add('hidden');
+            }
+            // URL が変わったら古い QR を消す
+            const qr = document.getElementById(`fi-${kind}-qr`);
+            qr.innerHTML = '';
+            qr.classList.add('hidden');
+        }
+
+        function getFormUrl(kind) {
+            if (!formIntegrationData) return '';
+            return kind === 'in' ? (formIntegrationData.inFormUrl || '') : (formIntegrationData.outFormUrl || '');
+        }
+
+        function openFormUrl(kind) {
+            const url = getFormUrl(kind);
+            if (!url) {
+                showToast('フォームがまだ作成されていません', 'error');
+                return;
+            }
+            window.open(url, '_blank', 'noopener');
+        }
+
+        function toggleFormQr(kind) {
+            const url = getFormUrl(kind);
+            const container = document.getElementById(`fi-${kind}-qr`);
+            if (!url) {
+                showToast('フォームがまだ作成されていません', 'error');
+                return;
+            }
+            if (!container.classList.contains('hidden')) {
+                container.classList.add('hidden');
+                return;
+            }
+            container.innerHTML = '';
+            new QRCode(container, {
+                text: url,
+                width: 200,
+                height: 200,
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.M
+            });
+            container.classList.remove('hidden');
+        }
+
+        function showFormActionResult(html, type) {
+            const box = document.getElementById('fi-action-result');
+            box.className = (type === 'error' ? 'error-box' : 'success-box');
+            box.innerHTML = html;
+            box.classList.remove('hidden');
+        }
+
+        async function syncFormChoicesNow() {
+            if (typeof isApiEnabled !== 'function' || !isApiEnabled()) {
+                showToast('API が設定されていません', 'error');
+                return;
+            }
+            showToast('🔄 選択肢を同期中...', 'success');
+            try {
+                const res = await apiSyncFormChoices();
+                if (!res || !res.success) throw new Error(res && res.error ? res.error : '同期に失敗しました');
+                showFormActionResult(`✅ フォームの選択肢を更新しました（商品 ${res.products} 件 / 入力者 ${res.staff} 人）`, 'success');
+                loadFormIntegration(false);
+            } catch (e) {
+                showFormActionResult('❌ 同期に失敗: ' + escapeHtml(e.message || e), 'error');
+            }
+        }
+
+        async function reprocessPending() {
+            if (typeof isApiEnabled !== 'function' || !isApiEnabled()) {
+                showToast('API が設定されていません', 'error');
+                return;
+            }
+            if (!confirm('「処理結果」が空のフォーム回答をすべて処理します。\n（処理済みの行は変更されません）\n\n実行しますか？')) {
+                return;
+            }
+            showToast('🔄 未処理の回答を処理中...', 'success');
+            try {
+                const res = await apiProcessPendingResponses();
+                if (!res || !res.success) throw new Error(res && res.error ? res.error : '再処理に失敗しました');
+                const p = res.processed || {};
+                showFormActionResult(`✅ 再処理が完了しました（入荷 ${p.in || 0} 件 / 出荷 ${p.out || 0} 件 / エラー ${p.errors || 0} 件）`, (p.errors ? 'error' : 'success'));
+            } catch (e) {
+                showFormActionResult('❌ 再処理に失敗: ' + escapeHtml(e.message || e), 'error');
+            }
+        }
+
         // ========================================
         // ユーティリティ
         // ========================================

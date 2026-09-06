@@ -572,17 +572,30 @@
         // ブラウザに保存
         async function saveMaster() {
             localStorage.setItem('omamori_master', JSON.stringify(master));
-            
+
             // APIにも保存
             if (typeof isApiEnabled === 'function' && isApiEnabled()) {
                 try {
                     await saveMasterDataToApi(master);
+                    syncFormChoicesInBackground();
                 } catch (e) {
                     console.error('APIへのマスタ保存失敗:', e);
                 }
             }
-            
+
             showToast('マスタを保存しました', 'success');
+        }
+
+        // Googleフォームの商品プルダウンをマスタに合わせて更新（フォーム連携が未導入なら何もしない）
+        function syncFormChoicesInBackground() {
+            if (typeof apiSyncFormChoices !== 'function') return;
+            apiSyncFormChoices().then(res => {
+                if (res && res.success) {
+                    console.log('フォーム選択肢を同期しました:', res);
+                }
+            }).catch(e => {
+                console.warn('フォーム選択肢の同期をスキップ（フォーム連携が未設定の可能性）:', e);
+            });
         }
 
         // トースト表示
