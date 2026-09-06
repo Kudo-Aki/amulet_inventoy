@@ -1017,27 +1017,8 @@ function showSummary() {
     // 日時
     elements.summaryDatetime.textContent = formatDateTime(session.startTime);
     
-    // 総数
-    elements.summaryTotalBoxes.textContent = session.scannedBoxes.length;
-    elements.summaryTotalQuantity.textContent = calculateTotalQuantity();
-    
-    // 商品別集計
-    const summary = calculateSummary();
-    elements.summaryTbody.innerHTML = '';
-    
-    Object.keys(summary).sort((a, b) => {
-        return summary[a].name.localeCompare(summary[b].name, 'ja');
-    }).forEach(code => {
-        const item = summary[code];
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${item.name}</td>
-            <td>${item.boxCount}箱</td>
-            <td>${item.quantity}個</td>
-            <td><strong>${item.total}個</strong></td>
-        `;
-        elements.summaryTbody.appendChild(row);
-    });
+    // 総数・商品別集計（台帳で処理済みの箱は除外して表示）
+    renderSummaryTable();
     
     // 在庫更新メッセージ（初期状態では非表示）
     const stockUpdateInfo = document.getElementById('stock-update-info');
@@ -1070,10 +1051,45 @@ function showSummary() {
     showScreen('summary-screen');
 }
 
+/**
+ * 集計画面の総数と商品別テーブルを描画（箱台帳で処理済みとして除外された箱は集計に含めない）
+ */
+function renderSummaryTable() {
+    const countedBoxes = session.scannedBoxes.filter(box => !box.excluded);
+    elements.summaryTotalBoxes.textContent = countedBoxes.length;
+    elements.summaryTotalQuantity.textContent = calculateTotalQuantity();
+
+    const summary = calculateSummary();
+    elements.summaryTbody.innerHTML = '';
+
+    Object.keys(summary).sort((a, b) => {
+        return summary[a].name.localeCompare(summary[b].name, 'ja');
+    }).forEach(code => {
+        const item = summary[code];
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${item.name}</td>
+            <td>${item.boxCount}箱</td>
+            <td>${item.quantity}個</td>
+            <td><strong>${item.total}個</strong></td>
+        `;
+        elements.summaryTbody.appendChild(row);
+    });
+
+    const excluded = session.scannedBoxes.filter(box => box.excluded);
+    if (excluded.length > 0) {
+        const row = document.createElement('tr');
+        const codes = excluded.slice(0, 5).map(b => b.qrCode).join(', ') + (excluded.length > 5 ? ' ほか' : '');
+        row.innerHTML = `<td colspan="4" style="color:#e65100;font-size:0.85rem;">⚠️ 台帳で処理済みのため除外: ${excluded.length}箱（${codes}）</td>`;
+        elements.summaryTbody.appendChild(row);
+    }
+}
+
 function calculateSummary() {
     const summary = {};
     
     session.scannedBoxes.forEach(box => {
+        if (box.excluded) return; // 箱台帳で処理済み（二重計上防止）
         if (!summary[box.productCode]) {
             const product = productMaster[box.productCode];
             summary[box.productCode] = {
@@ -1093,6 +1109,7 @@ function calculateSummary() {
 function calculateTotalQuantity() {
     let total = 0;
     session.scannedBoxes.forEach(box => {
+        if (box.excluded) return; // 箱台帳で処理済み（二重計上防止）
         const product = productMaster[box.productCode];
         if (product) {
             total += product.quantity;
@@ -1195,6 +1212,51 @@ async function loadMasterFromStorage() {
 // ========================================
 
 /**
+ * スキャンした箱を箱台帳と照合し、二重計上になる箱に excluded フラグを立てる
+ * 納品モード: 既に「入庫済」の箱を除外 / 出庫モード: 既に「出庫済」の箱を除外
+ * 台帳に無い箱（この機能より前に発行したラベル）は従来通り反映する
+ */
+async function checkBoxesAgainstLedger() {
+    session.scannedBoxes.forEach(box => {
+        box.excluded = false;
+        box.excludedReason = '';
+    });
+    const blockingStatus = session.mode === 'delivery' ? '入庫済' : '出庫済';
+    try {
+        const statuses = await apiCheckBoxes(session.scannedBoxes.map(box => box.qrCode));
+        const excluded = [];
+        session.scannedBoxes.forEach(box => {
+            const info = statuses[box.qrCode];
+            if (info && info.status === blockingStatus) {
+                box.excluded = true;
+                box.excludedReason = info.status;
+                excluded.push(box);
+            }
+        });
+        return { excluded, statusLabel: blockingStatus };
+    } catch (e) {
+        console.error('箱台帳の確認に失敗:', e);
+        return { excluded: [], statusLabel: blockingStatus, error: e.message || String(e) };
+    }
+}
+
+/**
+ * 在庫反映した箱を箱台帳に「入庫済」または「出庫済」として記録する（API有効時のみ）
+ */
+async function markBoxesInLedger() {
+    if (typeof isApiEnabled !== 'function' || !isApiEnabled() || typeof apiMarkBoxes !== 'function') {
+        return;
+    }
+    const codes = session.scannedBoxes.filter(box => !box.excluded).map(box => box.qrCode);
+    if (codes.length === 0) return;
+    try {
+        await apiMarkBoxes(codes, session.mode === 'delivery' ? 'in' : 'out', 'app ' + formatDateTime(new Date()));
+    } catch (e) {
+        console.error('箱台帳の更新に失敗（在庫は反映済み）:', e);
+    }
+}
+
+/**
  * 在庫を一括でスプレッドシートに反映する
  */
 async function confirmStockUpdate() {
@@ -1208,10 +1270,29 @@ async function confirmStockUpdate() {
         return;
     }
     
+    // 箱台帳との照合（API有効時のみ。Googleフォームで入荷登録済みの箱などの二重計上を防ぐ）
+    let excludedNote = '';
+    if (typeof isApiEnabled === 'function' && isApiEnabled() && typeof apiCheckBoxes === 'function') {
+        const check = await checkBoxesAgainstLedger();
+        if (check.error) {
+            if (!confirm(`箱台帳の確認ができませんでした（${check.error}）。\n台帳を確認せずに反映を続けますか？`)) {
+                return;
+            }
+        } else if (check.excluded.length > 0) {
+            renderSummaryTable();
+            if (check.excluded.length >= session.scannedBoxes.length) {
+                alert(`スキャンしたすべての箱（${check.excluded.length}箱）が既に「${check.statusLabel}」として箱台帳に記録されています。\n（Googleフォームで登録済みの入荷、または反映済みのスキャンです）\n\n在庫には反映しません。`);
+                return;
+            }
+            const list = check.excluded.slice(0, 10).map(b => `・${b.qrCode}`).join('\n');
+            excludedNote = `\n\n⚠️ 既に「${check.statusLabel}」の箱 ${check.excluded.length}箱 は二重計上を防ぐため除外します:\n${list}${check.excluded.length > 10 ? '\n…ほか' : ''}`;
+        }
+    }
+
     // 確認ダイアログ
     const modeText = session.mode === 'delivery' ? '納品' : '出庫';
     const totalQuantity = calculateTotalQuantity();
-    if (!confirm(`${modeText}データを在庫に反映します。\n\n総数量: ${totalQuantity}個\n\nよろしいですか？`)) {
+    if (!confirm(`${modeText}データを在庫に反映します。\n\n総数量: ${totalQuantity}個${excludedNote}\n\nよろしいですか？`)) {
         return;
     }
     
@@ -1266,6 +1347,9 @@ async function confirmStockUpdate() {
             await new Promise(resolve => setTimeout(resolve, 100));
         }
         
+        // 箱台帳に反映（API有効時のみ。失敗しても在庫反映には影響しない）
+        await markBoxesInLedger();
+
         // 完了表示
         showStockUpdateComplete();
         

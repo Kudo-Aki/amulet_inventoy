@@ -1216,7 +1216,9 @@ function createLabelPdfAction_(data) {
     var sentTo = '';
     if (data.to) {
       var to = String(data.to).trim();
-      if (to.indexOf('@') < 0) {
+      if (to === '__admin__') {
+        to = getConfigValue_('adminEmail', '');
+      } else if (to.indexOf('@') < 0) {
         var staff = resolveStaff_(to);
         to = staff && staff.email ? staff.email : '';
       }
