@@ -880,7 +880,7 @@
             
             history.slice().reverse().forEach(item => {
                 const row = document.createElement('tr');
-                const typeClass = item.type === '入庫' ? 'type-in' : 'type-out';
+                const typeClass = (item.type === 'in' || item.type === '入庫') ? 'type-in' : 'type-out';
                 row.innerHTML = `
                     <td>${item.date}</td>
                     <td><span class="${typeClass}">${item.type}</span></td>
@@ -2287,7 +2287,7 @@
             // APIに保存
             if (typeof isApiEnabled === 'function' && isApiEnabled()) {
                 try {
-                    await saveStockDataToApi(master, stockData);
+                    await saveStockDataToApi(stockData);
                 } catch (e) {
                     console.error('棚卸しAPI保存エラー:', e);
                 }
