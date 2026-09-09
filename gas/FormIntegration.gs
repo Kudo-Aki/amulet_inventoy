@@ -25,13 +25,15 @@ var FI_SHEETS_ = {
   LEDGER: '箱台帳',
   IN_RESP: 'フォーム回答_入荷',
   OUT_RESP: 'フォーム回答_出荷',
-  INV_RESP: 'フォーム回答_棚卸'
+  INV_RESP: 'フォーム回答_棚卸',
+  PRODUCT_RESP: 'フォーム回答_商品登録'
 };
 
 var FI_FORM_TITLES_ = {
   IN: 'お守り入荷登録',
   OUT: 'お守り出荷登録',
-  INV: 'お守り棚卸登録'
+  INV: 'お守り棚卸登録',
+  PRODUCT: 'お守り商品登録'
 };
 
 // フォームの質問タイトル（回答シートのヘッダー名にもなる。変更する場合はフォームも作り直す）
@@ -45,8 +47,26 @@ var FI_Q_ = {
   BOXES: '箱数',      // 箱数1, 箱数2, ...
   PIECES: '端数',     // 端数1, ...（出荷のみ。箱に満たない個数）
   DEST: '出荷先',
-  NOTE: '備考'
+  NOTE: '備考',
+  // 商品登録フォーム
+  PRODUCT_NAME: '商品名',
+  PRODUCT_CODE: '商品コード',
+  UNIT: '入数',
+  UNIT_PRICE: '単価（税込）',
+  SAFE_STOCK: '安心在庫',
+  INIT_STOCK: '初期在庫',
+  SUPPLIER: '発注先',
+  CONTACT: '担当者',
+  EMAIL: 'メールアドレス'
 };
+
+// 商品コードは英大文字のみ 1〜12文字。
+// この制約は js/app.js:904 の parseQrCode（/^([A-Z]+)-(\d{2})-(\d{4})$/）に由来する。
+// 数字・小文字・記号を含むコードは QR ラベルの読み取りが一切通らないため、
+// 設定シートで変更できるようにはしていない（緩めると以後に作られた商品の
+// スキャンが黙って壊れ、原因が分からなくなる）。
+var FI_CODE_PATTERN_ = /^[A-Z]{1,12}$/;
+var FI_CODE_PATTERN_TEXT_ = '^[A-Z]{1,12}$';
 
 var FI_IN_SLOTS_ = 10;   // 入荷フォームの商品枠数
 var FI_OUT_SLOTS_ = 3;   // 出荷フォームの商品枠数
@@ -60,7 +80,8 @@ var FI_STATUS_ = {
   STOCK_DONE: '在庫反映済',
   DONE: '完了',
   PDF_FAILED: '在庫反映済/PDF失敗',
-  ERROR: 'エラー'
+  ERROR: 'エラー',
+  SYNC_FAILED: '登録済/選択肢同期失敗'
 };
 
 var FI_LEDGER_HEADERS_ = ['qrCode', 'productCode', 'year', 'boxNumber', 'status', 'issuedAt', 'source', 'inAt', 'outAt', 'ref', 'note'];
@@ -86,6 +107,10 @@ var FI_CONFIG_DEFAULTS_ = [
   ['invFormEditUrl', '', '棚卸フォーム 編集用URL（自動設定）'],
   ['invResponseSheet', 'フォーム回答_棚卸', '棚卸の回答シート名'],
   ['maxInventoryCount', 100000, '棚卸で1商品に入力できる実在庫数の上限（桁の入力ミス対策）'],
+  ['productFormId', '', '商品登録フォームID（自動設定）'],
+  ['productFormUrl', '', '商品登録フォーム 回答用URL（自動設定）'],
+  ['productFormEditUrl', '', '商品登録フォーム 編集用URL（自動設定）'],
+  ['productResponseSheet', 'フォーム回答_商品登録', '商品登録の回答シート名'],
   ['offsetX_mm', 0, 'ラベル印字位置の微調整 横（mm、右が＋）'],
   ['offsetY_mm', 0, 'ラベル印字位置の微調整 縦（mm、下が＋）'],
   ['maxBoxesPerLine', 50, '1商品あたりの箱数上限（フォーム）'],
@@ -223,7 +248,7 @@ function nowJa_() {
 // 種別を増やすときは、この表に1件足して handle（ロック内の反映）と
 // postLock（ロック外のPDF・メール）を書けばよい。
 
-var FI_KIND_ORDER_ = ['in', 'out', 'inv'];
+var FI_KIND_ORDER_ = ['in', 'out', 'inv', 'product'];
 
 var FI_ROLE_ = { STAFF: 'staff', PRODUCT: 'product' };
 
@@ -331,6 +356,41 @@ function buildFormSpecs_() {
     tail: [fiParagraphQuestion_(FI_Q_.NOTE, false)],
     handle: handleInventory_,
     postLock: null
+  };
+
+  specs['product'] = {
+    kind: 'product',
+    label: '商品登録',
+    formTitle: FI_FORM_TITLES_.PRODUCT,
+    description: '商品マスタに無い授与品を登録します。棚卸や入荷の途中で未登録の品が出てきたときに使ってください。初期在庫を入れれば、登録と在庫の計上が1回の送信で済みます。',
+    confirmation: '登録しました。商品マスタに追加し、他のフォームの選択肢にも反映します（反映まで1分ほどかかることがあります）。',
+    formIdKey: 'productFormId', formUrlKey: 'productFormUrl', formEditUrlKey: 'productFormEditUrl',
+    sheetKey: 'productResponseSheet', sheetDefault: FI_SHEETS_.PRODUCT_RESP,
+    slots: 0,
+    dateTitle: null,
+    head: [
+      fiListQuestion_(FI_Q_.STAFF, true, 'ご自身の名前を選んでください（入力者シートに登録された人）', [FI_STAFF_PLACEHOLDER_], FI_ROLE_.STAFF),
+      fiTextQuestion_(FI_Q_.PRODUCT_NAME, true, '例: 交通安全御守', null),
+      fiTextQuestion_(FI_Q_.PRODUCT_CODE, true,
+        '英大文字のみ 1〜12文字（例: KOTSU）。数字・小文字・記号・スペース・全角は使えません。' +
+        'QRラベルの読み取りに使うため、この形でないとスキャンできなくなります',
+        { kind: 'pattern', help: '英大文字のみ 1〜12文字で入力してください（例: KOTSU）', pattern: FI_CODE_PATTERN_TEXT_ }),
+      fiTextQuestion_(FI_Q_.UNIT, true, '1箱あたりの個数（1以上の整数）', FI_WHOLE_NUMBER_),
+      fiTextQuestion_(FI_Q_.UNIT_PRICE, false, '1個あたりの税込単価（任意。空欄なら0）', FI_WHOLE_NUMBER_),
+      fiTextQuestion_(FI_Q_.SAFE_STOCK, false, 'これを下回ると警告します（任意。空欄なら10）', FI_WHOLE_NUMBER_),
+      fiTextQuestion_(FI_Q_.INIT_STOCK, false, '今ある個数（任意。空欄なら0）。棚卸や入荷の途中で見つけた品はここに個数を入れれば、この1回で在庫の計上まで済みます', FI_WHOLE_NUMBER_),
+      fiTextQuestion_(FI_Q_.SUPPLIER, false, '発注先の会社名（任意）', null),
+      fiTextQuestion_(FI_Q_.CONTACT, false, '発注先の担当者名（任意）', null),
+      fiTextQuestion_(FI_Q_.EMAIL, false, '発注先のメールアドレス（任意。見積依頼に使います）', null)
+    ],
+    slotQuestions: [],
+    tail: [fiParagraphQuestion_(FI_Q_.NOTE, false)],
+    handle: handleProductRegister_,
+    postLock: postLockProduct_,
+    postFailStatus: FI_STATUS_.SYNC_FAILED,
+    postFailSubject: 'フォームの選択肢の同期に失敗',
+    postFailLead: '商品の登録は完了していますが、フォームの選択肢の同期に失敗しました。',
+    postFailHint: '管理画面の「選択肢を同期」を押してください（毎朝6時にも自動で同期されます）。'
   };
 
   return specs;
@@ -877,11 +937,13 @@ function processResponseRow_(sheet, row, opts) {
     Object.keys(doneCells).forEach(function(k) { finalCells[k] = doneCells[k]; });
     writeResultCells_(sheet, row, finalCells);
   } catch (err2) {
-    writeResultCells_(sheet, row, { '処理結果': FI_STATUS_.PDF_FAILED, '処理日時': nowJa_(), 'エラー': String(err2.message || err2) });
-    sendAdminMail_('【お守り在庫】ラベルPDF/メールの作成に失敗（' + ref + '）',
-      '在庫の反映は完了していますが、PDF作成またはメール送信に失敗しました。\n\n回答行: ' + ref + '\nエラー: ' + (err2.message || err2) +
-      '\n\n管理画面の「未処理の回答を再処理」ではなく、PDF再送（resendLabelPdf）を使ってください。\n\n' + (err2.stack || ''));
-    return { status: FI_STATUS_.PDF_FAILED, message: String(err2.message || err2) };
+    var failStatus = spec.postFailStatus || FI_STATUS_.PDF_FAILED;
+    writeResultCells_(sheet, row, { '処理結果': failStatus, '処理日時': nowJa_(), 'エラー': String(err2.message || err2) });
+    sendAdminMail_('【お守り在庫】' + (spec.postFailSubject || 'ラベルPDF/メールの作成に失敗') + '（' + ref + '）',
+      (spec.postFailLead || '在庫の反映は完了していますが、PDF作成またはメール送信に失敗しました。') +
+      '\n\n回答行: ' + ref + '\nエラー: ' + (err2.message || err2) +
+      '\n\n' + (spec.postFailHint || '管理画面の「未処理の回答を再処理」ではなく、PDF再送（resendLabelPdf）を使ってください。') + '\n\n' + (err2.stack || ''));
+    return { status: failStatus, message: String(err2.message || err2) };
   }
   return { status: FI_STATUS_.DONE };
 }
@@ -1001,6 +1063,114 @@ function writeResultCells_(sheet, row, obj) {
     var idx = headers.indexOf(key);
     if (idx >= 0) sheet.getRange(row, idx + 1).setValue(obj[key]);
   });
+}
+
+/**
+ * 商品コードを検証する。黙って直さず、エラーで差し戻す。
+ *
+ * 大文字に揃えたり記号を落としたりしないのは、入力者が意図したコードと
+ * 登録されるコードが食い違うと、後からQRラベルを見ても原因が分からなくなるため。
+ * 制約の由来は FI_CODE_PATTERN_ のコメント（js/app.js:904 の parseQrCode）を参照。
+ */
+function validateProductCode_(raw) {
+  var s = String(raw === undefined || raw === null ? '' : raw).trim();
+  if (!s) throw new Error('商品コードを入力してください');
+  if (!FI_CODE_PATTERN_.test(s)) {
+    throw new Error('商品コードは英大文字のみ 1〜12文字で入力してください' +
+      '（数字・小文字・記号・スペース・全角は使えません）。入力値: ' + s);
+  }
+  return s;
+}
+
+/**
+ * 数値欄を読む。空欄は既定値（required なら エラー）
+ */
+function parseIntField_(raw, label, opts) {
+  opts = opts || {};
+  if (!hasAnswer_(raw)) {
+    if (opts.required) throw new Error(label + ' を入力してください');
+    return opts.def === undefined ? 0 : opts.def;
+  }
+  var n = Number(String(raw).trim());
+  if (!isFinite(n) || Math.floor(n) !== n) throw new Error(label + ' は整数で入力してください: ' + raw);
+  if (opts.min !== undefined && n < opts.min) throw new Error(label + ' は ' + opts.min + ' 以上で入力してください: ' + raw);
+  if (opts.max !== undefined && n > opts.max) throw new Error(label + ' は ' + opts.max + ' 以下で入力してください: ' + raw);
+  return n;
+}
+
+/**
+ * 商品登録の反映（ロック内）
+ */
+function handleProductRegister_(c) {
+  var map = c.map;
+  var products = c.products;
+
+  var name = String(map[FI_Q_.PRODUCT_NAME] === undefined || map[FI_Q_.PRODUCT_NAME] === null ? '' : map[FI_Q_.PRODUCT_NAME]).trim();
+  if (!name) throw new Error('商品名を入力してください');
+  var code = validateProductCode_(map[FI_Q_.PRODUCT_CODE]);
+
+  // addProduct（gas/Code.gs）の重複チェックは === なので大文字小文字を区別する。
+  // 'HEALTH' と 'Health' が別の商品として並ぶと QR がどちらにも当たらなくなるため、
+  // 大文字小文字を無視した重複走査をここで先に行う。
+  // （FI_CODE_PATTERN_ が小文字を弾くので現状は理論上の保険だが、
+  //   過去に手入力で作られた小文字混じりのコードが残っている場合に効く）
+  var upper = code.toUpperCase();
+  var dup = null;
+  Object.keys(products).forEach(function(existing) {
+    if (dup) return;
+    if (String(existing).trim().toUpperCase() === upper) dup = existing;
+  });
+  if (dup) {
+    throw new Error('商品コードが既に使われています: ' + dup +
+      (products[dup] && products[dup].name ? '（' + products[dup].name + '）' : '') + '。別のコードにしてください');
+  }
+
+  var unit = parseIntField_(map[FI_Q_.UNIT], '入数', { required: true, min: 1 });
+  var unitPrice = parseIntField_(map[FI_Q_.UNIT_PRICE], '単価（税込）', { min: 0, def: 0 });
+  var safeStock = parseIntField_(map[FI_Q_.SAFE_STOCK], '安心在庫', { min: 0, def: 10 });
+  var initStock = parseIntField_(map[FI_Q_.INIT_STOCK], '初期在庫', { min: 0, def: 0 });
+  var note = String(map[FI_Q_.NOTE] || '').trim();
+
+  var r = addProduct({
+    code: code,
+    name: name,
+    quantity: unit,
+    unitPrice: unitPrice,
+    supplier: String(map[FI_Q_.SUPPLIER] || '').trim(),
+    contact: String(map[FI_Q_.CONTACT] || '').trim(),
+    email: String(map[FI_Q_.EMAIL] || '').trim(),
+    stock: initStock,
+    safeStock: safeStock,
+    ordered: false
+  });
+  if (!r || !r.success) throw new Error(r && r.error ? r.error : '商品の登録に失敗しました');
+
+  if (initStock > 0) {
+    addHistoryRecord({
+      date: nowJa_(),
+      type: 'in',
+      productCode: code,
+      productName: name,
+      quantity: initStock,
+      note: 'フォーム商品登録: 初期在庫 入力者:' + c.staffName + (note ? ' ' + note : '')
+    });
+  }
+
+  var summary = '新しい商品を登録しました\n' +
+    name + '（' + code + '）: 入数 ' + unit + '個 / 単価 ' + unitPrice + '円 / 安心在庫 ' + safeStock + '個\n' +
+    (initStock > 0 ? '初期在庫 ' + initStock + '個を計上しました' : '初期在庫は 0個（在庫の計上なし）');
+
+  return { summary: summary, cells: {}, post: { code: code, name: name } };
+}
+
+/**
+ * 商品登録のロック外処理: 新しい商品を他のフォームの選択肢に出す。
+ * syncFormChoices は4フォームで10〜30秒かかるため、必ずロックの外で呼ぶ。
+ */
+function postLockProduct_(c, post, recipient, staffLabel, summaryText) {
+  var r = syncFormChoices();
+  Logger.log('postLockProduct_: syncFormChoices ' + JSON.stringify(r));
+  return {};
 }
 
 /**
