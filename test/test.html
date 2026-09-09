@@ -61,7 +61,7 @@
         // ========================================
 
         function parseQrCode(qrCode) {
-            const regex = /^([A-Z]+)-(\d{2})-(\d{3})$/;
+            const regex = /^([A-Z]+)-(\d{2})-(\d{4})$/;
             const match = qrCode.match(regex);
             if (!match) return null;
             return {
@@ -89,22 +89,22 @@
         h2_1.textContent = 'QRコードパース';
         results.appendChild(h2_1);
 
-        test('正常なQRコード（HEALTH-25-001）をパースできる', () => {
-            const result = parseQrCode('HEALTH-25-001');
+        test('正常なQRコード（HEALTH-25-0001）をパースできる', () => {
+            const result = parseQrCode('HEALTH-25-0001');
             assertEqual(result.productCode, 'HEALTH', '商品コード');
             assertEqual(result.year, '25', '年度');
-            assertEqual(result.boxNumber, '001', '箱連番');
+            assertEqual(result.boxNumber, '0001', '箱連番');
         });
 
-        test('正常なQRコード（MONEY-25-999）をパースできる', () => {
-            const result = parseQrCode('MONEY-25-999');
+        test('正常なQRコード（MONEY-25-0999）をパースできる', () => {
+            const result = parseQrCode('MONEY-25-0999');
             assertEqual(result.productCode, 'MONEY', '商品コード');
             assertEqual(result.year, '25', '年度');
-            assertEqual(result.boxNumber, '999', '箱連番');
+            assertEqual(result.boxNumber, '0999', '箱連番');
         });
 
         test('不正なQRコード（小文字）はnullを返す', () => {
-            const result = parseQrCode('health-25-001');
+            const result = parseQrCode('health-25-0001');
             assertEqual(result, null, '小文字は無効');
         });
 
@@ -130,33 +130,33 @@
 
         test('空のセッションでは重複なし', () => {
             testSession.scannedBoxes = [];
-            const result = checkDuplicate('HEALTH-25-001');
+            const result = checkDuplicate('HEALTH-25-0001');
             assertFalse(result, '空セッションは重複なし');
         });
 
         test('未登録のQRコードは重複なし', () => {
             testSession.scannedBoxes = [
-                { qrCode: 'HEALTH-25-001' },
-                { qrCode: 'MONEY-25-001' }
+                { qrCode: 'HEALTH-25-0001' },
+                { qrCode: 'MONEY-25-0001' }
             ];
-            const result = checkDuplicate('HEALTH-25-002');
+            const result = checkDuplicate('HEALTH-25-0002');
             assertFalse(result, '未登録は重複なし');
         });
 
         test('登録済みのQRコードは重複あり', () => {
             testSession.scannedBoxes = [
-                { qrCode: 'HEALTH-25-001' },
-                { qrCode: 'MONEY-25-001' }
+                { qrCode: 'HEALTH-25-0001' },
+                { qrCode: 'MONEY-25-0001' }
             ];
-            const result = checkDuplicate('HEALTH-25-001');
+            const result = checkDuplicate('HEALTH-25-0001');
             assertTrue(result, '登録済みは重複あり');
         });
 
         test('同一商品・別箱は重複なし', () => {
             testSession.scannedBoxes = [
-                { qrCode: 'HEALTH-25-001' }
+                { qrCode: 'HEALTH-25-0001' }
             ];
-            const result = checkDuplicate('HEALTH-25-002');
+            const result = checkDuplicate('HEALTH-25-0002');
             assertFalse(result, '別箱は重複なし');
         });
 
@@ -203,8 +203,8 @@
 
         test('単一商品の集計が正しい', () => {
             const boxes = [
-                { qrCode: 'HEALTH-25-001', productCode: 'HEALTH', productName: '健康守り' },
-                { qrCode: 'HEALTH-25-002', productCode: 'HEALTH', productName: '健康守り' }
+                { qrCode: 'HEALTH-25-0001', productCode: 'HEALTH', productName: '健康守り' },
+                { qrCode: 'HEALTH-25-0002', productCode: 'HEALTH', productName: '健康守り' }
             ];
             const result = calculateSummary(boxes);
             assertEqual(result.totalBoxes, 2, '総箱数');
@@ -213,9 +213,9 @@
 
         test('複数商品の集計が正しい', () => {
             const boxes = [
-                { qrCode: 'HEALTH-25-001', productCode: 'HEALTH', productName: '健康守り' },
-                { qrCode: 'MONEY-25-001', productCode: 'MONEY', productName: '金運守り' },
-                { qrCode: 'HEALTH-25-002', productCode: 'HEALTH', productName: '健康守り' }
+                { qrCode: 'HEALTH-25-0001', productCode: 'HEALTH', productName: '健康守り' },
+                { qrCode: 'MONEY-25-0001', productCode: 'MONEY', productName: '金運守り' },
+                { qrCode: 'HEALTH-25-0002', productCode: 'HEALTH', productName: '健康守り' }
             ];
             const result = calculateSummary(boxes);
             assertEqual(result.totalBoxes, 3, '総箱数');

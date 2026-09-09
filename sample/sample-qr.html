@@ -138,7 +138,7 @@
             const container = document.getElementById(product.container);
             
             for (let i = 1; i <= boxCount; i++) {
-                const boxNumber = String(i).padStart(3, '0');
+                const boxNumber = String(i).padStart(4, '0');
                 const qrCode = `${product.code}-${year}-${boxNumber}`;
                 
                 const card = document.createElement('div');

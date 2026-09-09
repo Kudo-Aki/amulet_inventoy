@@ -6,6 +6,8 @@
     <title>QRコード発行</title>
     <!-- qrcode.js ライブラリ（CDN） -->
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <!-- API連携（箱台帳の採番・ラベルPDFメール送付。API未設定時は従来通り） -->
+    <script src="../js/api.js"></script>
     <style>
         * {
             margin: 0;
@@ -326,6 +328,8 @@
                     <label>開始番号</label>
                     <small>箱の連番</small>
                     <input type="number" id="start-number" value="1" min="1">
+                    <button type="button" class="btn btn-secondary" id="btn-next-number" onclick="fetchNextBoxNumber(true)" style="margin-top:6px;padding:6px 10px;font-size:0.85rem;">🔢 台帳の次番号を取得</button>
+                    <small id="next-number-hint"></small>
                 </div>
             </div>
             <div class="form-row">
@@ -350,6 +354,26 @@
             </div>
             <button class="btn btn-success" onclick="openPrintPage()">🖨️ 印刷用ページを開く</button>
             <button class="btn btn-secondary" onclick="saveHistory()">💾 履歴に保存</button>
+            <button class="btn btn-primary" onclick="openMailPanel()">📧 PDFをメールで送る</button>
+
+            <!-- ラベルPDFのメール送付（API有効時のみ） -->
+            <div id="mail-panel" class="info-box" style="display:none; margin-top:12px;">
+                <strong>📧 ラベルPDFをメールで送る</strong><br>
+                GAS 側で同じレイアウト（エーワン 31266・8面）の PDF を作成し、指定した入力者にメールで送ります。PC が無くても印刷できます。
+                <div class="form-row" style="margin-top:8px;">
+                    <div class="form-group">
+                        <label>送信先</label>
+                        <select id="mail-to"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <label style="font-weight:normal;"><input type="checkbox" id="mail-register" checked> 箱台帳に「発行済」として登録する</label>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="sendLabelPdfMail()">送信する</button>
+                <button class="btn btn-secondary" onclick="document.getElementById('mail-panel').style.display='none'">閉じる</button>
+                <div id="mail-result" style="margin-top:8px;"></div>
+            </div>
             
             <!-- プレビューエリア -->
             <div class="preview-container" id="preview-area"></div>
@@ -371,6 +395,8 @@
                 </tbody>
             </table>
             <button class="btn btn-secondary" onclick="clearHistory()" style="margin-top:12px;">🗑️ 履歴をクリア</button>
+            <button class="btn btn-secondary" onclick="uploadHistoryToLedger()" style="margin-top:12px;">☁️ 発行履歴を箱台帳へ登録</button>
+            <p style="margin-top:8px;font-size:0.85rem;color:#666;">※ 発行履歴はこの端末にのみ保存されます。API設定時は「履歴に保存」で箱台帳（スプレッドシート）にも登録され、別の端末と番号が重ならないようになります。</p>
         </div>
 
         <a href="index.html" class="back-link">← 管理メニューに戻る</a>
@@ -413,6 +439,7 @@
             loadMaster();
             populateProductSelect();
             loadHistory();
+            initLedgerIntegration();
         });
 
         // マスタ読み込み
@@ -808,6 +835,9 @@
             // 次回の開始番号を自動設定
             document.getElementById('start-number').value = startNumber + count;
 
+            // API有効時は箱台帳にも「発行済」で登録（別端末との番号重複を防ぐ）
+            registerIssuedBoxes(productCode, year, startNumber, count);
+
             showToast('発行履歴を保存しました', 'success');
         }
 
@@ -842,6 +872,154 @@
                 loadHistory();
                 showToast('履歴を削除しました', 'success');
             }
+        }
+
+        // ========================================
+        // 箱台帳・ラベルPDF連携（API有効時のみ動作。API未設定時は従来通り）
+        // ========================================
+
+        function ledgerApiAvailable() {
+            return typeof isApiEnabled === 'function' && isApiEnabled() && typeof apiGetNextBoxNumber === 'function';
+        }
+
+        function initLedgerIntegration() {
+            const hint = document.getElementById('next-number-hint');
+            const btn = document.getElementById('btn-next-number');
+            if (!ledgerApiAvailable()) {
+                if (hint) hint.textContent = '（API設定時は箱台帳から次の番号を自動取得できます）';
+                if (btn) btn.disabled = true;
+                return;
+            }
+            document.getElementById('product-select').addEventListener('change', () => fetchNextBoxNumber(false));
+            document.getElementById('year').addEventListener('change', () => fetchNextBoxNumber(false));
+        }
+
+        // 箱台帳から「商品×年」の次の箱番号を取得して開始番号に設定
+        async function fetchNextBoxNumber(showMessage) {
+            if (!ledgerApiAvailable()) {
+                if (showMessage) showToast('API が設定されていません', 'error');
+                return;
+            }
+            const productCode = document.getElementById('product-select').value;
+            const year = String(document.getElementById('year').value).padStart(2, '0');
+            const hint = document.getElementById('next-number-hint');
+            if (!productCode) {
+                if (showMessage) showToast('商品を選択してください', 'error');
+                return;
+            }
+            hint.textContent = '台帳を確認中...';
+            try {
+                const res = await apiGetNextBoxNumber(productCode, year);
+                if (!res || !res.success) throw new Error(res && res.error ? res.error : '取得に失敗しました');
+                document.getElementById('start-number').value = res.data.next;
+                hint.textContent = `台帳の次番号: ${productCode}-${year}-${String(res.data.next).padStart(4, '0')}`;
+                if (showMessage) showToast('開始番号を箱台帳から設定しました', 'success');
+            } catch (e) {
+                hint.textContent = '台帳を確認できませんでした（' + (e.message || e) + '）';
+                if (showMessage) showToast('台帳の確認に失敗しました', 'error');
+            }
+        }
+
+        // 発行した番号範囲を箱台帳に「発行済」で登録
+        async function registerIssuedBoxes(productCode, year, startNumber, count) {
+            if (!ledgerApiAvailable()) return;
+            try {
+                const res = await apiRegisterBoxes(productCode, year, startNumber, count);
+                if (res && res.success) {
+                    showToast(`箱台帳に ${res.registered} 件を「発行済」で登録しました`, 'success');
+                } else if (res && res.conflicts && res.conflicts.length) {
+                    alert(`⚠️ 箱台帳に既にある番号が含まれています（${res.conflicts.length}件）:\n${res.conflicts.slice(0, 10).join('\n')}\n\n重複していない ${res.registered} 件だけ登録しました。\n次回は「台帳の次番号を取得」で開始番号を確認してください。`);
+                } else {
+                    showToast('箱台帳への登録に失敗: ' + (res && res.error ? res.error : '不明なエラー'), 'error');
+                }
+                fetchNextBoxNumber(false);
+            } catch (e) {
+                console.error('箱台帳登録エラー:', e);
+                showToast('箱台帳への登録に失敗しました（発行履歴はこの端末に保存済み）', 'error');
+            }
+        }
+
+        // PDFメール送付パネルを開く（送信先は入力者シートから取得）
+        async function openMailPanel() {
+            if (!generatedData) {
+                showToast('先にQRコードを生成してください', 'error');
+                return;
+            }
+            if (!ledgerApiAvailable() || typeof apiCreateLabelPdf !== 'function') {
+                showToast('API が設定されていないためメール送付は使えません', 'error');
+                return;
+            }
+            const panel = document.getElementById('mail-panel');
+            const select = document.getElementById('mail-to');
+            document.getElementById('mail-result').innerHTML = '';
+            panel.style.display = 'block';
+            select.innerHTML = '<option value="">読み込み中...</option>';
+            try {
+                const res = await apiGetStaff();
+                const staff = (res && res.success && Array.isArray(res.data)) ? res.data : [];
+                select.innerHTML = '';
+                staff.filter(s => s.hasEmail).forEach(s => {
+                    const o = document.createElement('option');
+                    o.value = s.name;
+                    o.textContent = s.name;
+                    select.appendChild(o);
+                });
+                const admin = document.createElement('option');
+                admin.value = '__admin__';
+                admin.textContent = '管理者（設定シートの adminEmail）';
+                select.appendChild(admin);
+            } catch (e) {
+                select.innerHTML = '<option value="__admin__">管理者（設定シートの adminEmail）</option>';
+            }
+        }
+
+        // GAS 側でラベルPDFを作成してメール送付
+        async function sendLabelPdfMail() {
+            if (!generatedData) return;
+            const select = document.getElementById('mail-to');
+            const register = document.getElementById('mail-register').checked;
+            const result = document.getElementById('mail-result');
+            const { productCode, year, startNumber, count } = generatedData;
+            result.innerHTML = '🔄 PDFを作成して送信中...（数十秒かかることがあります）';
+            try {
+                const params = { productCode, year, start: startNumber, count, register, to: select.value || '__admin__' };
+                const res = await apiCreateLabelPdf(params);
+                if (!res || !res.success) throw new Error(res && res.error ? res.error : '作成に失敗しました');
+                result.innerHTML = `✅ 送信しました（${res.count}枚 / ${res.pages}ページ）` + (res.sentTo ? ` → ${res.sentTo}` : '') +
+                    (res.pdfUrl ? `<br><a href="${res.pdfUrl}" target="_blank" rel="noopener">📄 PDFを開く</a>` : '') +
+                    (res.conflicts && res.conflicts.length ? `<br>⚠️ 台帳に既にある番号: ${res.conflicts.slice(0, 5).join(', ')}` : '');
+                showToast('ラベルPDFを送信しました', 'success');
+                if (register) fetchNextBoxNumber(false);
+            } catch (e) {
+                result.innerHTML = '❌ ' + (e.message || e);
+                showToast('送信に失敗しました', 'error');
+            }
+        }
+
+        // この端末の発行履歴をまとめて箱台帳に登録（初回移行用）
+        async function uploadHistoryToLedger() {
+            if (!ledgerApiAvailable()) {
+                showToast('API が設定されていません', 'error');
+                return;
+            }
+            const history = JSON.parse(localStorage.getItem('qr_history') || '[]');
+            if (history.length === 0) {
+                showToast('この端末に発行履歴がありません', 'error');
+                return;
+            }
+            if (!confirm(`この端末の発行履歴 ${history.length} 件を箱台帳に「発行済」として登録します。\n既に台帳にある番号は登録されません。\n\n実行しますか？`)) return;
+            let registered = 0, conflicts = 0, failed = 0;
+            for (const item of history) {
+                try {
+                    const res = await apiRegisterBoxes(item.productCode, item.year, item.startNumber, item.endNumber - item.startNumber + 1, 'qrgen-history');
+                    registered += (res && res.registered) || 0;
+                    conflicts += (res && res.conflicts) ? res.conflicts.length : 0;
+                } catch (e) {
+                    failed++;
+                }
+            }
+            alert(`箱台帳への登録が完了しました。\n登録: ${registered} 件 / 既存のため省略: ${conflicts} 件 / 失敗: ${failed} 件`);
+            fetchNextBoxNumber(false);
         }
 
         // トースト表示

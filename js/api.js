@@ -457,3 +457,99 @@ async function syncLocalDataToApi() {
         return { success: false, error: e.toString() };
     }
 }
+
+// ========================================
+// Googleフォーム連携・箱台帳・ラベルPDF（FormIntegration.gs の拡張アクション）
+// いずれも API 未設定時は例外を投げるので、呼び出し側で isApiEnabled() を確認すること
+// ========================================
+
+/**
+ * フォーム連携の設定状態（フォームURL・入力者数・トリガー状態など）を取得
+ */
+async function apiGetFormConfig() {
+    return await apiGet('getFormConfig');
+}
+
+/**
+ * 商品マスタ・入力者シートからフォームのプルダウン選択肢を更新
+ */
+async function apiSyncFormChoices() {
+    return await apiPost('syncFormChoices', {});
+}
+
+/**
+ * 未処理のフォーム回答を再処理
+ */
+async function apiProcessPendingResponses() {
+    return await apiPost('processPendingResponses', {});
+}
+
+/**
+ * 入力者一覧（名前とメール有無）を取得
+ */
+async function apiGetStaff() {
+    return await apiGet('getStaff');
+}
+
+/**
+ * 箱台帳から次の箱番号を取得
+ */
+async function apiGetNextBoxNumber(productCode, year) {
+    return await apiPost('getNextBoxNumber', { productCode, year });
+}
+
+/**
+ * 発行したラベルの番号範囲を箱台帳に「発行済」で登録
+ */
+async function apiRegisterBoxes(productCode, year, start, count, source = 'qrgen') {
+    return await apiPost('registerBoxes', { productCode, year, start, count, source });
+}
+
+/**
+ * QRコードの台帳状態を確認（200件ずつに分割して送信）
+ * @returns {Promise<Object>} { 'CODE-YY-NNNN': { status: '発行済'|'入庫済'|'出庫済'|'unknown', ... } }
+ */
+async function apiCheckBoxes(qrCodes) {
+    const result = {};
+    const CHUNK = 200;
+    for (let i = 0; i < qrCodes.length; i += CHUNK) {
+        const chunk = qrCodes.slice(i, i + CHUNK);
+        const res = await apiPost('checkBoxes', { qrCodes: chunk });
+        if (!res || !res.success) {
+            throw new Error(res && res.error ? res.error : '台帳の確認に失敗しました');
+        }
+        Object.assign(result, res.data || {});
+    }
+    return result;
+}
+
+/**
+ * QRコードの台帳状態を更新（status: 'in' = 入庫済, 'out' = 出庫済）
+ */
+async function apiMarkBoxes(qrCodes, status, ref = '') {
+    const CHUNK = 200;
+    let updated = 0, added = 0;
+    for (let i = 0; i < qrCodes.length; i += CHUNK) {
+        const res = await apiPost('markBoxes', { qrCodes: qrCodes.slice(i, i + CHUNK), status, source: 'app', ref });
+        if (res && res.success) {
+            updated += res.updated || 0;
+            added += res.added || 0;
+        }
+    }
+    return { success: true, updated, added };
+}
+
+/**
+ * ラベルPDFをサーバー側で作成し、必要ならメール送付・台帳登録する
+ * @param {Object} params { productCode, year, start, count, to?, register? }
+ */
+async function apiCreateLabelPdf(params) {
+    return await apiPost('createLabelPdf', params);
+}
+
+/**
+ * フォーム回答行のラベルPDFを再送
+ */
+async function apiResendLabelPdf(sheet, row, to = '') {
+    return await apiPost('resendLabelPdf', { sheet, row, to });
+}
