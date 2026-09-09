@@ -627,3 +627,25 @@ async function apiAddHistoryBatch(records) {
     }
     return { success: errors.length === 0, added, errors };
 }
+
+/**
+ * 変更のあった商品だけ在庫を保存する。
+ *
+ * GAS 側の saveStockToProducts は `if (code && stock[code])` で部分更新に対応しているため、
+ * 送らなかった商品はシート上の値がそのまま残る。画面を開いてから他の経路
+ * （Googleフォームの入荷・出荷・棚卸、別の端末）で更新された商品を巻き戻さないよう、
+ * 全件ではなく差分だけを送ること。
+ *
+ * localStorage は更新しない（呼び出し側が画面の状態に合わせて保存すること）。
+ * @param {Object} changed { 商品コード: { stock, safeStock } }
+ */
+async function apiSaveStockPartial(changed) {
+    const codes = Object.keys(changed || {});
+    if (!codes.length) return { success: true, sent: 0 };
+    if (!isApiEnabled()) return { success: true, sent: 0 };
+    const res = await apiPost('saveStock', { stock: changed });
+    if (!res || !res.success) {
+        throw new Error(res && res.error ? res.error : '在庫の保存に失敗しました');
+    }
+    return { success: true, sent: codes.length };
+}

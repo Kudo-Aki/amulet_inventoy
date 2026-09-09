@@ -785,6 +785,132 @@
 
         let master = {};
         let stockData = {}; // { productCode: { stock: 数量, safeStock: 安心在庫 } }
+
+        // 画面を描いた時点の在庫の控え。保存時に「この画面で変えたもの」だけを見分けるために使う。
+        // 変更分だけをシートへ送ることで、画面を開いたあとに Googleフォームなどから
+        // 更新された商品を巻き戻さずに済む（在庫保存の本質的な事故防止はここ）。
+        let seededStock = {};
+
+        // 設定シートの自動バックアップ設定（1回だけ取りに行って使い回す）
+        let backupPrefs = null;
+
+        function seedStockSnapshot() {
+            seededStock = {};
+            Object.keys(stockData).forEach(code => {
+                seededStock[code] = {
+                    stock: Number(stockData[code].stock) || 0,
+                    safeStock: Number(stockData[code].safeStock) || 0
+                };
+            });
+        }
+
+        async function getBackupPrefs() {
+            if (backupPrefs) return backupPrefs;
+            if (typeof isApiEnabled !== 'function' || !isApiEnabled() || typeof apiGetBackupStatus !== 'function') {
+                backupPrefs = {};
+                return backupPrefs;
+            }
+            try {
+                const res = await apiGetBackupStatus();
+                backupPrefs = (res && res.success && res.data) ? res.data : {};
+            } catch (e) {
+                // 古いGASでは未対応。既定の扱い（棚卸前はバックアップを試みる）にする
+                console.error('バックアップ設定の取得に失敗:', e);
+                backupPrefs = {};
+            }
+            return backupPrefs;
+        }
+
+        /**
+         * 在庫欄をまとめて読む。空欄・数値でない欄は null にして、商品名つきで返す
+         */
+        function readStockInputs() {
+            const values = {};
+            const blanks = [];
+            Object.keys(master).forEach(code => {
+                const stockInput = document.getElementById(`stock-${code}`);
+                const safeInput = document.getElementById(`safe-${code}`);
+                if (!stockInput || !safeInput) return;
+                const name = master[code] ? master[code].name : code;
+                const parse = (el, label) => {
+                    const raw = String(el.value).trim();
+                    if (raw === '') { blanks.push(`${name}（${label}）`); return null; }
+                    const n = parseInt(raw, 10);
+                    if (isNaN(n)) { blanks.push(`${name}（${label}）`); return null; }
+                    return n;
+                };
+                values[code] = { stock: parse(stockInput, '現在庫'), safeStock: parse(safeInput, '安心在庫') };
+            });
+            return { values, blanks };
+        }
+
+        /**
+         * 画面を描いた時点と比べて変わった商品だけを集める
+         */
+        function collectChangedStock(values) {
+            const changed = {};
+            Object.keys(values).forEach(code => {
+                const seed = seededStock[code];
+                const v = values[code];
+                if (!seed || seed.stock !== v.stock || seed.safeStock !== v.safeStock) {
+                    changed[code] = { stock: v.stock, safeStock: v.safeStock };
+                }
+            });
+            return changed;
+        }
+
+        /**
+         * 送る直前に最新を取り直して突き合わせる。
+         *  - この画面で変えた商品がサーバー側でも動いていたら、商品名を挙げて確認する
+         *  - この画面で変えていない商品がサーバー側で動いていたら、黙ってサーバーの値を採る
+         *    （Googleフォームからの入荷・出荷・棚卸がこれにあたる）
+         * @returns {Promise<boolean>} 続行してよければ true
+         */
+        async function reconcileWithServer(changed, actionLabel) {
+            if (typeof isApiEnabled !== 'function' || !isApiEnabled() || typeof fetchStockData !== 'function') return true;
+            let latest = null;
+            try {
+                latest = await fetchStockData();
+            } catch (e) {
+                console.error('最新在庫の取得に失敗:', e);
+                return confirm('最新の在庫を確認できませんでした。\n' +
+                    '他の端末やGoogleフォームからの更新を上書きする可能性があります。\n\n' +
+                    'このまま' + actionLabel + 'しますか？');
+            }
+            if (!latest || !Object.keys(latest).length) return true;
+
+            const conflicts = [];
+            let adopted = 0;
+            Object.keys(latest).forEach(code => {
+                const seed = seededStock[code];
+                const server = latest[code];
+                if (!seed || !server) return;
+                const serverStock = Number(server.stock) || 0;
+                const serverSafe = Number(server.safeStock) || 0;
+                if (serverStock === seed.stock && serverSafe === seed.safeStock) return;
+                if (changed[code]) {
+                    const name = master[code] ? master[code].name : code;
+                    conflicts.push(`${name}: 画面 ${seed.stock} → サーバー ${serverStock}` +
+                        `（${actionLabel}すると ${changed[code].stock} になります）`);
+                } else {
+                    // この画面で触っていない商品はサーバーの値を採用する
+                    stockData[code] = { stock: serverStock, safeStock: serverSafe };
+                    seededStock[code] = { stock: serverStock, safeStock: serverSafe };
+                    adopted++;
+                }
+            });
+            if (adopted) {
+                console.log(`他の経路で更新された ${adopted} 件はサーバーの値を採用しました`);
+            }
+            if (!conflicts.length) return true;
+            return confirm(
+                'この画面を開いたあとに、次の商品がサーバー側でも変わっています。\n' +
+                '（Googleフォームや別の端末からの更新の可能性があります）\n\n' +
+                conflicts.slice(0, 10).join('\n') +
+                (conflicts.length > 10 ? `\nほか ${conflicts.length - 10} 件` : '') +
+                '\n\nこのまま' + actionLabel + 'すると、画面の値で上書きします。続けますか？'
+            );
+        }
         let orderData = {}; // { productCode: { ordered: true/false, quantity: 発注数, deliveryDate: 納期 } }
 
         // 初期化
@@ -1051,6 +1177,7 @@
 
         // 在庫テーブル描画
         function renderStockTable() {
+            seedStockSnapshot();
             const tbody = document.getElementById('stock-tbody');
             tbody.innerHTML = '';
 
@@ -1347,36 +1474,64 @@
             document.getElementById('total-order-amount').textContent = `¥${total.toLocaleString()}`;
         }
 
-        // 在庫保存
+        // 在庫保存（この画面で変えた商品だけを送る）
         async function saveStock() {
-            Object.keys(master).forEach(code => {
-                const stockInput = document.getElementById(`stock-${code}`);
-                const safeInput = document.getElementById(`safe-${code}`);
-                
-                if (stockInput && safeInput) {
-                    stockData[code] = {
-                        stock: parseInt(stockInput.value) || 0,
-                        safeStock: parseInt(safeInput.value) || 0
-                    };
-                }
-            });
+            const { values, blanks } = readStockInputs();
 
+            // 空欄を 0 として書き込まない。以前は parseInt('') || 0 で
+            // 消しただけの欄が「在庫ゼロ」としてシートに入っていた
+            if (blanks.length) {
+                showToast('空欄があります。数字を入れてください（在庫ゼロなら 0）: ' +
+                    blanks.slice(0, 3).join('、') + (blanks.length > 3 ? ` ほか${blanks.length - 3}件` : ''), 'error');
+                return;
+            }
+
+            const changed = collectChangedStock(values);
+            const changedCodes = Object.keys(changed);
+            if (!changedCodes.length) {
+                showToast('変更はありません', 'info');
+                return;
+            }
+
+            const apiOn = (typeof isApiEnabled === 'function' && isApiEnabled());
+            if (apiOn) {
+                showToast('🔄 最新の在庫を確認中...', 'info', false);
+                if (!await reconcileWithServer(changed, '保存')) {
+                    showToast('保存を中止しました', 'info');
+                    renderStockTable();
+                    checkAlerts();
+                    updateStats();
+                    return;
+                }
+                const prefs = await getBackupPrefs();
+                if (prefs.beforeStockSave) {
+                    try {
+                        await apiCreateBackup('在庫保存前(アプリ)', '在庫管理', '');
+                    } catch (e) {
+                        console.error('保存前バックアップに失敗:', e);
+                    }
+                }
+            }
+
+            changedCodes.forEach(code => {
+                stockData[code] = { stock: changed[code].stock, safeStock: changed[code].safeStock };
+            });
             localStorage.setItem('omamori_stock', JSON.stringify(stockData));
-            
-            // APIにも保存
-            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+
+            if (apiOn) {
                 showToast('🔄 スプレッドシートに保存中...', 'info', false);
                 try {
-                    await saveStockDataToApi(stockData);
-                    showToast('✅ 在庫データを保存しました（スプレッドシートに同期済み）', 'success');
+                    await apiSaveStockPartial(changed);
+                    showToast(`✅ ${changedCodes.length}件の在庫を保存しました（スプレッドシートに同期済み）`, 'success');
                 } catch (e) {
                     console.error('APIへの在庫保存失敗:', e);
                     showToast('⚠️ 在庫データを保存しました（ローカルのみ）', 'info');
                 }
             } else {
-                showToast('✅ 在庫データを保存しました', 'success');
+                showToast(`✅ ${changedCodes.length}件の在庫を保存しました`, 'success');
             }
-            
+
+            renderStockTable();   // 中で seedStockSnapshot() が走り、保存後の値が新しい基準になる
             checkAlerts();
             updateStats();
         }
@@ -2187,6 +2342,7 @@
         }
 
         function renderInventoryTable() {
+            seedStockSnapshot();
             const tbody = document.getElementById('inventory-tbody');
             tbody.innerHTML = '';
 
@@ -2197,7 +2353,7 @@
                 row.innerHTML = `
                     <td><strong>${product.name}</strong><br><small style="color:#999;">${code}</small></td>
                     <td style="text-align:center;">${stock}</td>
-                    <td><input type="number" min="0" value="${stock}" data-code="${code}" class="inventory-input" onchange="updateInventoryDiff()" style="width:80px;padding:6px;border:1px solid #ddd;border-radius:4px;text-align:center;"></td>
+                    <td><input type="number" min="0" value="${stock}" data-code="${code}" class="inventory-input" oninput="updateInventoryDiff()" onchange="updateInventoryDiff()" style="width:80px;padding:6px;border:1px solid #ddd;border-radius:4px;text-align:center;"></td>
                     <td class="inventory-diff" data-code="${code}" style="text-align:center;font-weight:bold;">0</td>
                 `;
                 tbody.appendChild(row);
@@ -2205,91 +2361,168 @@
             updateInventoryDiff();
         }
 
-        function updateInventoryDiff() {
-            let hasDiff = false;
-            let totalDiff = 0;
-            let diffCount = 0;
-
+        /**
+         * 棚卸の入力欄をまとめて読む。
+         * 空欄は 0 ではなく null（未入力）。以前は parseInt('') || 0 のため、
+         * 欄を消しただけの商品が「在庫ゼロ」として反映されていた。
+         */
+        function readInventoryInputs() {
+            const rows = [];
             document.querySelectorAll('.inventory-input').forEach(input => {
                 const code = input.dataset.code;
-                const systemStock = stockData[code] ? stockData[code].stock : 0;
-                const actualStock = parseInt(input.value) || 0;
-                const diff = actualStock - systemStock;
-                totalDiff += diff;
+                const raw = String(input.value).trim();
+                const n = raw === '' ? NaN : parseInt(raw, 10);
+                const seed = seededStock[code];
+                rows.push({
+                    code: code,
+                    name: master[code] ? master[code].name : code,
+                    systemStock: seed ? seed.stock : (stockData[code] ? Number(stockData[code].stock) || 0 : 0),
+                    actualStock: isNaN(n) ? null : n,
+                    input: input
+                });
+            });
+            return rows;
+        }
 
-                const diffCell = document.querySelector(`.inventory-diff[data-code="${code}"]`);
+        function updateInventoryDiff() {
+            let totalDiff = 0;
+            let diffCount = 0;
+            let blankCount = 0;
+
+            readInventoryInputs().forEach(r => {
+                const diffCell = document.querySelector(`.inventory-diff[data-code="${r.code}"]`);
+                if (!diffCell) return;
+                if (r.actualStock === null) {
+                    blankCount++;
+                    diffCell.textContent = '—';
+                    diffCell.style.color = '#e65100';
+                    r.input.style.borderColor = '#ff9800';
+                    r.input.style.background = '#fff8e1';
+                    return;
+                }
+                const diff = r.actualStock - r.systemStock;
+                totalDiff += diff;
                 if (diff !== 0) {
-                    hasDiff = true;
                     diffCount++;
                     diffCell.textContent = (diff > 0 ? '+' : '') + diff;
                     diffCell.style.color = diff > 0 ? '#2e7d32' : '#c62828';
-                    input.style.borderColor = diff > 0 ? '#4CAF50' : '#f44336';
-                    input.style.background = diff > 0 ? '#f1f8e9' : '#fff3e0';
+                    r.input.style.borderColor = diff > 0 ? '#4CAF50' : '#f44336';
+                    r.input.style.background = diff > 0 ? '#f1f8e9' : '#fff3e0';
                 } else {
                     diffCell.textContent = '0';
                     diffCell.style.color = '#999';
-                    input.style.borderColor = '#ddd';
-                    input.style.background = 'white';
+                    r.input.style.borderColor = '#ddd';
+                    r.input.style.background = 'white';
                 }
             });
 
             const summaryDiv = document.getElementById('inventory-diff-summary');
-            if (hasDiff) {
-                summaryDiv.innerHTML = `<span style="color:#e65100;">⚠️ ${diffCount}種類の商品に差異があります（合計: ${totalDiff > 0 ? '+' : ''}${totalDiff}）</span>`;
-            } else {
-                summaryDiv.innerHTML = '<span style="color:#4CAF50;">✅ 全ての商品の在庫が一致しています</span>';
-            }
+            const parts = [];
+            if (diffCount) parts.push(`<span style="color:#e65100;">⚠️ ${diffCount}種類の商品に差異があります（合計: ${totalDiff > 0 ? '+' : ''}${totalDiff}）</span>`);
+            if (blankCount) parts.push(`<span style="color:#e65100;">✏️ ${blankCount}種類が未入力です（数字を入れてください。在庫ゼロなら 0）</span>`);
+            if (!parts.length) parts.push('<span style="color:#4CAF50;">✅ 全ての商品の在庫が一致しています</span>');
+            summaryDiv.innerHTML = parts.join('<br>');
         }
 
         async function applyInventory() {
-            // 差異がある商品を収集
-            const updates = [];
-            document.querySelectorAll('.inventory-input').forEach(input => {
-                const code = input.dataset.code;
-                const systemStock = stockData[code] ? stockData[code].stock : 0;
-                const actualStock = parseInt(input.value) || 0;
-                if (actualStock !== systemStock) {
-                    updates.push({ code, systemStock, actualStock, diff: actualStock - systemStock });
-                }
-            });
+            const rows = readInventoryInputs();
+
+            // 未入力を 0 として反映しない
+            const blanks = rows.filter(r => r.actualStock === null);
+            if (blanks.length) {
+                showToast('未入力の商品があります。数字を入れてください（在庫ゼロなら 0）: ' +
+                    blanks.slice(0, 3).map(r => r.name).join('、') +
+                    (blanks.length > 3 ? ` ほか${blanks.length - 3}件` : ''), 'error');
+                return;
+            }
+
+            const updates = rows
+                .filter(r => r.actualStock !== r.systemStock)
+                .map(r => ({ code: r.code, name: r.name, systemStock: r.systemStock, actualStock: r.actualStock, diff: r.actualStock - r.systemStock }));
 
             if (updates.length === 0) {
                 showToast('差異のある商品がありません', 'info');
                 return;
             }
 
-            const confirmMsg = updates.map(u => {
-                const name = master[u.code] ? master[u.code].name : u.code;
-                return `${name}: ${u.systemStock} → ${u.actualStock} (${u.diff > 0 ? '+' : ''}${u.diff})`;
-            }).join('\n');
-
+            const confirmMsg = updates.map(u => `${u.name}: ${u.systemStock} → ${u.actualStock} (${u.diff > 0 ? '+' : ''}${u.diff})`).join('\n');
             if (!confirm(`以下の商品の在庫を更新しますか？\n\n${confirmMsg}`)) {
                 return;
             }
 
+            const apiOn = (typeof isApiEnabled === 'function' && isApiEnabled());
+            const changed = {};
+            updates.forEach(u => {
+                const safeStock = (stockData[u.code] && stockData[u.code].safeStock !== undefined)
+                    ? Number(stockData[u.code].safeStock) || 0 : 10;
+                changed[u.code] = { stock: u.actualStock, safeStock: safeStock };
+            });
+
+            let backupId = '';
+            if (apiOn) {
+                showToast('🔄 最新の在庫を確認中...', 'info', true);
+                if (!await reconcileWithServer(changed, '反映')) {
+                    showToast('棚卸しの反映を中止しました', 'info');
+                    renderInventoryTable();
+                    return;
+                }
+                // 棚卸は在庫を数えた数で上書きするので、反映前に必ずバックアップを試みる。
+                // 設定シートの backupBeforeAppInventory が FALSE のときだけ省略する
+                const prefs = await getBackupPrefs();
+                if (prefs.beforeAppInventory !== false) {
+                    showToast('🔄 反映前のバックアップを作成しています...', 'info', true);
+                    try {
+                        const res = await apiCreateBackup('棚卸前(アプリ)', '在庫管理', `${updates.length}件を反映`);
+                        if (!res || !res.success) throw new Error(res && res.error ? res.error : 'バックアップに失敗しました');
+                        backupId = res.backupId;
+                    } catch (e) {
+                        console.error('棚卸前のバックアップに失敗:', e);
+                        if (!confirm('反映前のバックアップに失敗しました。\n' +
+                            (e.message || e) + '\n\n' +
+                            'バックアップなしで棚卸しを反映しますか？\n（反映後に元の在庫へ戻せなくなります）')) {
+                            showToast('棚卸しの反映を中止しました', 'info');
+                            return;
+                        }
+                    }
+                }
+            }
+
             showToast('🔄 棚卸し結果を反映しています...', 'info', true);
 
-            // 在庫を更新
+            const records = [];
             updates.forEach(u => {
-                if (!stockData[u.code]) {
-                    stockData[u.code] = { stock: 0, safeStock: 10 };
-                }
+                if (!stockData[u.code]) stockData[u.code] = { stock: 0, safeStock: 10 };
                 stockData[u.code].stock = u.actualStock;
-
-                // 履歴に追加
-                const diff = u.diff;
-                const type = diff > 0 ? 'in' : 'out';
-                addHistory(type, u.code, Math.abs(diff), '棚卸し調整');
+                const type = u.diff > 0 ? 'in' : 'out';
+                const note = `棚卸し調整: ${u.systemStock}→${u.actualStock} (${u.diff > 0 ? '+' : ''}${u.diff})`;
+                addHistory(type, u.code, Math.abs(u.diff), note);
+                records.push({
+                    date: new Date().toLocaleString('ja-JP'),
+                    type: type,
+                    productCode: u.code,
+                    productName: u.name,
+                    quantity: Math.abs(u.diff),
+                    note: note
+                });
             });
 
             localStorage.setItem('omamori_stock', JSON.stringify(stockData));
 
-            // APIに保存
-            if (typeof isApiEnabled === 'function' && isApiEnabled()) {
+            let historyWarning = '';
+            if (apiOn) {
                 try {
-                    await saveStockDataToApi(stockData);
+                    await apiSaveStockPartial(changed);
                 } catch (e) {
                     console.error('棚卸しAPI保存エラー:', e);
+                    showToast('⚠️ 棚卸しを反映しましたが、スプレッドシートへの保存に失敗しました', 'error');
+                }
+                // 履歴もスプレッドシートへ送る（以前は端末内にしか残らなかった）
+                try {
+                    const h = await apiAddHistoryBatch(records);
+                    if (!h.success) historyWarning = '（履歴の一部が記録できませんでした）';
+                } catch (e) {
+                    console.error('棚卸し履歴の送信に失敗:', e);
+                    historyWarning = '（履歴はこの端末にのみ記録されました）';
                 }
             }
 
@@ -2297,7 +2530,8 @@
             checkAlerts();
             updateStats();
             renderInventoryTable();
-            showToast('✅ 棚卸し結果を反映しました', 'success');
+            showToast('✅ 棚卸し結果を反映しました' +
+                (backupId ? `（反映前のバックアップ: ${backupId}）` : '') + historyWarning, 'success');
         }
 
         function resetInventory() {
@@ -2311,13 +2545,11 @@
             csv += `棚卸し日: ${now.toLocaleDateString('ja-JP')}\n`;
             csv += '商品名,商品コード,システム在庫,実在庫,差異\n';
 
-            document.querySelectorAll('.inventory-input').forEach(input => {
-                const code = input.dataset.code;
-                const name = master[code] ? master[code].name : code;
-                const systemStock = stockData[code] ? stockData[code].stock : 0;
-                const actualStock = parseInt(input.value) || 0;
-                const diff = actualStock - systemStock;
-                csv += `${name},${code},${systemStock},${actualStock},${diff}\n`;
+            readInventoryInputs().forEach(r => {
+                // 未入力は 0 と書かず空欄のまま出す（数えていないことが分かるように）
+                const actual = r.actualStock === null ? '' : r.actualStock;
+                const diff = r.actualStock === null ? '' : (r.actualStock - r.systemStock);
+                csv += `${r.name},${r.code},${r.systemStock},${actual},${diff}\n`;
             });
 
             downloadFile(csv, `omamori_inventory_${formatDateForFilename(now)}.csv`, 'text/csv;charset=utf-8');
