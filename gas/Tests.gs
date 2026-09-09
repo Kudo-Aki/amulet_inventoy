@@ -9,6 +9,10 @@
  *   test_sampleLabelPdf      8面のサンプルPDF（LabelPdf.gs。Drive に保存）
  *   test_processLastInRow    入荷回答シートの最終行を処理（未処理の場合のみ在庫が動く）
  *   test_dryRunLastInRow     入荷回答シートの最終行を解釈だけする（在庫は動かない）
+ *   test_hasAnswer           棚卸の「空欄」と「0」の区別（シートを変更しない）
+ *   test_productCode         商品コードの検証（シートを変更しない）
+ *   test_formSpecs           4種別のフォーム仕様表（シートを変更しない）
+ *   test_backupRoundTrip     バックアップ → 在庫を変更 → 復元 → 取り消し（★商品管理シートを実際に書き換えます）
  */
 
 function assertEq_(actual, expected, label) {
@@ -85,4 +89,89 @@ function test_processLastInRow() {
   var row = sheet.getLastRow();
   var r = processResponseRow_(sheet, row, {});
   Logger.log('行 ' + row + ': ' + JSON.stringify(r));
+}
+
+/**
+ * 棚卸で最も壊れやすい「空欄」と「0」の区別。
+ * hasAnswer_ を if (!v) などに書き換えると、実在庫0個が「数えていない」に化けて在庫が壊れる。
+ */
+function test_hasAnswer() {
+  assertEq_(hasAnswer_(0), true, '数値の 0 は回答あり');
+  assertEq_(hasAnswer_('0'), true, '文字列の 0 は回答あり');
+  assertEq_(hasAnswer_(''), false, '空文字は回答なし');
+  assertEq_(hasAnswer_('   '), false, '空白だけは回答なし');
+  assertEq_(hasAnswer_(null), false, 'null は回答なし');
+  assertEq_(hasAnswer_(undefined), false, 'undefined は回答なし');
+  Logger.log('test_hasAnswer: すべて OK');
+}
+
+/**
+ * 商品コードの検証。QRラベルの読み取り（js/app.js:904）が英大文字を前提にしている
+ */
+function test_productCode() {
+  assertEq_(validateProductCode_('KOTSU'), 'KOTSU', '英大文字は通る');
+  assertEq_(validateProductCode_('  KOTSU  '), 'KOTSU', '前後の空白は落とす');
+  assertEq_(validateProductCode_('ABCDEFGHIJKL'), 'ABCDEFGHIJKL', '12文字は通る');
+  ['', '   ', 'NEW1', 'new', 'New', 'ABCDEFGHIJKLM', 'KO-TSU', 'KO TSU', 'ＫＯＴＳＵ', 'お守り'].forEach(function(v) {
+    var rejected = false;
+    try { validateProductCode_(v); } catch (e) { rejected = true; }
+    assertEq_(rejected, true, '拒否されるべき: ' + JSON.stringify(v));
+  });
+  Logger.log('test_productCode: すべて OK');
+}
+
+/**
+ * 4種別のフォーム仕様表。質問の並びと必須指定を確認する（フォームは作らない）
+ */
+function test_formSpecs() {
+  assertEq_(FI_KIND_ORDER_, ['in', 'out', 'inv', 'product'], '種別の順序');
+  FI_KIND_ORDER_.forEach(function(kind) {
+    var spec = getFormSpec_(kind);
+    if (!spec) throw new Error('NG 仕様が無い種別: ' + kind);
+    if (typeof spec.handle !== 'function') throw new Error('NG handle が無い: ' + kind);
+    Logger.log('  ' + kind + '（' + spec.label + '）: ' +
+      formQuestionPlan_(spec).map(function(e) { return e.title; }).join(', '));
+  });
+  var inv = formQuestionPlan_(getFormSpec_('inv'));
+  assertEq_(inv.slice(0, 4).map(function(e) { return e.title; }), ['入力者', '棚卸日', '商品1', '実在庫数1'], '棚卸の並び');
+  assertEq_(inv.filter(function(e) { return e.required; }).map(function(e) { return e.title; }),
+    ['入力者', '商品1', '実在庫数1'], '棚卸の必須は枠1だけ');
+  var prod = formQuestionPlan_(getFormSpec_('product'));
+  assertEq_(prod.map(function(e) { return e.title; }),
+    ['入力者', '商品名', '商品コード', '入数', '単価（税込）', '安心在庫', '初期在庫', '発注先', '担当者', 'メールアドレス', '備考'],
+    '商品登録の並び');
+  Logger.log('test_formSpecs: すべて OK');
+}
+
+/**
+ * ★このテストは商品管理シートを実際に書き換えます（最後に元へ戻します）。
+ * バックアップ → 在庫を変更 → 復元 → 取り消し が一巡することを確認します。
+ */
+function test_backupRoundTrip() {
+  var products = getProductsData().data;
+  var codes = Object.keys(products);
+  if (!codes.length) throw new Error('商品管理シートが空です');
+  var code = codes[0];
+  var before = Number(products[code].stock) || 0;
+  Logger.log('対象: ' + code + '（現在庫 ' + before + '）');
+
+  var bk = takeBackupLocked_('テスト', 'test_backupRoundTrip', '自動テスト');
+  Logger.log('  バックアップ: ' + bk.backupId + '（商品 ' + bk.count + ' 件）');
+
+  updateSingleProduct(code, { stock: before + 12345 });
+  assertEq_(Number(getProductsData().data[code].stock), before + 12345, '在庫を変更した');
+
+  var pv = previewRestore_(bk.backupId, 'stock');
+  Logger.log('  プレビュー: 変更 ' + pv.changeCount + ' 件 / 据え置き ' + pv.added.length + ' 件 / 復活させず ' + pv.missing.length + ' 件');
+
+  var r = restoreBackup_(bk.backupId, 'stock', 'test_backupRoundTrip');
+  assertEq_(Number(getProductsData().data[code].stock), before, '復元で元の在庫に戻った');
+  Logger.log('  復元: ' + r.restoredCount + ' 件 / 取り消し用: ' + r.undoBackupId);
+
+  restoreBackup_(r.undoBackupId, 'stock', 'test_backupRoundTrip');
+  assertEq_(Number(getProductsData().data[code].stock), before + 12345, '取り消しで復元前に戻った');
+
+  restoreBackup_(bk.backupId, 'stock', 'test_backupRoundTrip');
+  assertEq_(Number(getProductsData().data[code].stock), before, '後始末: 元の在庫に戻した');
+  Logger.log('test_backupRoundTrip: すべて OK（在庫は元に戻してあります）');
 }

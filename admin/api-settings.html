@@ -92,6 +92,7 @@
             font-weight: 600;
             color: #333;
         }
+        .form-group select,
         .form-group input[type="text"],
         .form-group input[type="url"] {
             width: 100%;
@@ -337,6 +338,31 @@
             text-decoration: none;
             display: inline-block;
         }
+        .bk-table-wrap {
+            overflow-x: auto;
+            max-height: 340px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+        .bk-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .bk-table th, .bk-table td {
+            padding: 6px 10px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+            white-space: nowrap;
+        }
+        .bk-table th {
+            background: #f5f5f5;
+            position: sticky;
+            top: 0;
+        }
+        .bk-from { color: #c62828; }
+        .bk-to { color: #2e7d32; font-weight: 600; }
         .tab-content.active {
             display: block;
         }
@@ -430,8 +456,10 @@
         <div class="section" id="form-integration">
             <h2>📮 Googleフォーム連携</h2>
             <div class="info-box">
-                入荷・出荷を Googleフォームから登録すると、スプレッドシートの在庫・履歴・発注状況に自動で反映されます。<br>
-                入荷時は箱に貼るラベル（QR付き）の PDF が入力者宛にメールで届きます。アプリ側は次回の起動・更新時に反映されます。
+                入荷・出荷・棚卸・商品登録を Googleフォームから送ると、スプレッドシートの在庫・履歴・発注状況に自動で反映されます。<br>
+                入荷時は箱に貼るラベル（QR付き）の PDF が入力者宛にメールで届きます。
+                棚卸は反映の前に自動でバックアップを取ります（下の「バックアップと復元」から戻せます）。
+                アプリ側は次回の起動・更新時に反映されます。
             </div>
             <div id="fi-not-configured" class="warning-box">
                 API URL を設定して接続すると、ここにフォームの URL と状態が表示されます。<br>
@@ -442,28 +470,7 @@
             <div id="fi-error" class="error-box hidden"></div>
             <div id="fi-content" class="hidden">
                 <div id="fi-status" class="fi-status-grid"></div>
-                <div class="fi-form-cards">
-                    <div class="fi-form-card">
-                        <h3>📥 入荷フォーム</h3>
-                        <p class="fi-url"><a id="fi-in-url" href="#" target="_blank" rel="noopener"></a></p>
-                        <div class="btn-group">
-                            <button class="btn btn-primary" onclick="openFormUrl('in')">フォームを開く</button>
-                            <button class="btn btn-info" onclick="toggleFormQr('in')">🔲 QRコード</button>
-                            <a id="fi-in-edit" class="btn btn-secondary" href="#" target="_blank" rel="noopener">編集画面</a>
-                        </div>
-                        <div id="fi-in-qr" class="fi-qr hidden"></div>
-                    </div>
-                    <div class="fi-form-card">
-                        <h3>📤 出荷フォーム</h3>
-                        <p class="fi-url"><a id="fi-out-url" href="#" target="_blank" rel="noopener"></a></p>
-                        <div class="btn-group">
-                            <button class="btn btn-primary" onclick="openFormUrl('out')">フォームを開く</button>
-                            <button class="btn btn-info" onclick="toggleFormQr('out')">🔲 QRコード</button>
-                            <a id="fi-out-edit" class="btn btn-secondary" href="#" target="_blank" rel="noopener">編集画面</a>
-                        </div>
-                        <div id="fi-out-qr" class="fi-qr hidden"></div>
-                    </div>
-                </div>
+                <div class="fi-form-cards" id="fi-form-cards"></div>
                 <div class="btn-group" style="margin-top: 16px;">
                     <button class="btn btn-success" onclick="syncFormChoicesNow()">🔄 選択肢を同期（商品・入力者）</button>
                     <button class="btn btn-info" onclick="reprocessPending()">📨 未処理の回答を再処理</button>
@@ -491,7 +498,9 @@
                     </li>
                     <li>
                         <strong>setupFormIntegration を実行</strong><br>
-                        関数を選んで実行し、権限を承認します。設定・入力者・箱台帳シート、入荷/出荷フォーム、トリガー、ラベルテンプレートが作られます
+                        関数を選んで実行し、権限を承認します。設定・入力者・箱台帳・バックアップ台帳/明細シート、
+                        入荷/出荷/棚卸/商品登録フォーム、トリガー、ラベルテンプレートが作られます。
+                        既にセットアップ済みでも、もう一度実行すれば不足しているものだけが追加されます
                     </li>
                     <li>
                         <strong>シートを記入</strong><br>
@@ -509,6 +518,49 @@
                     </li>
                 </ol>
             </details>
+        </div>
+
+        <!-- バックアップと復元 -->
+        <div class="section" id="backup-restore">
+            <h2>💾 バックアップと復元</h2>
+            <div class="info-box">
+                棚卸は在庫を数えた数で上書きします。反映の前に自動でバックアップを取り、ここから戻せます。<br>
+                バックアップはスプレッドシートの「バックアップ台帳」「バックアップ明細」シートに保存されます
+                （保持世代数を超えた分は古い順に消えます）。
+            </div>
+            <div id="bk-not-configured" class="warning-box">
+                API URL を設定して接続すると、ここにバックアップの一覧が表示されます。
+            </div>
+            <div id="bk-loading" class="info-box hidden">🔄 バックアップの状態を取得中...</div>
+            <div id="bk-error" class="error-box hidden"></div>
+            <div id="bk-content" class="hidden">
+                <div id="bk-status" class="fi-status-grid"></div>
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="createBackupNow()">💾 今すぐバックアップ</button>
+                    <button class="btn btn-secondary" onclick="loadBackups(true)">一覧を更新</button>
+                </div>
+                <div class="form-group" style="margin-top: 16px;">
+                    <label for="bk-select">復元するバックアップ</label>
+                    <select id="bk-select" onchange="onBackupSelectionChanged()"></select>
+                </div>
+                <div class="form-group">
+                    <label for="bk-scope">戻す範囲</label>
+                    <select id="bk-scope" onchange="onBackupSelectionChanged()">
+                        <option value="stock">在庫のみ（現在庫・安心在庫）</option>
+                        <option value="all">すべて（商品名〜発注数/納期）</option>
+                    </select>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-info" onclick="previewRestoreNow()">🔍 変更点を確認</button>
+                    <button class="btn btn-primary" id="bk-restore-btn" onclick="restoreBackupNow()" disabled>♻️ この内容で復元</button>
+                </div>
+                <p class="qr-instruction" style="text-align: left; margin-top: 8px;">
+                    先に「変更点を確認」を押すと、何がどう変わるかを見てから復元できます。<br>
+                    バックアップに無い商品はそのまま残ります。バックアップにあって今の商品管理に無い商品は復活しません。
+                </p>
+                <div id="bk-preview" class="hidden" style="margin-top: 12px;"></div>
+                <div id="bk-result" class="hidden" style="margin-top: 12px;"></div>
+            </div>
         </div>
 
         <!-- セットアップ手順 -->
@@ -698,8 +750,9 @@
                 document.getElementById('qr-code-container').classList.add('hidden');
             }
 
-            // フォーム連携の状態も更新
+            // フォーム連携・バックアップの状態も更新
             if (typeof loadFormIntegration === 'function') loadFormIntegration(false);
+            if (typeof loadBackups === 'function') loadBackups(false);
         }
         
         // ========================================
@@ -847,17 +900,63 @@
                 { label: '商品', value: (data.productCount || 0) + ' 件', ok: (data.productCount || 0) > 0 },
                 { label: '通知先（管理者）', value: data.adminEmail || '未設定', ok: !!data.adminEmail }
             ];
+            if (data.backup) {
+                items.push({
+                    label: 'バックアップ',
+                    value: data.backup.ready ? data.backup.count + ' 世代' : '未作成',
+                    ok: !!data.backup.ready
+                });
+            }
             document.getElementById('fi-status').innerHTML = items.map(it =>
                 `<div class="fi-status-item ${it.ok ? 'ok' : 'ng'}"><div class="label">${escapeHtml(it.label)}</div><div class="value">${escapeHtml(it.value)}</div></div>`
             ).join('');
 
-            setFormLink('in', data.inFormUrl, data.inFormEditUrl);
-            setFormLink('out', data.outFormUrl, data.outFormEditUrl);
+            renderFormCards(getFormList(data));
 
             const ssLink = document.getElementById('fi-ss-url');
             if (data.spreadsheetUrl) {
                 ssLink.href = data.spreadsheetUrl;
             }
+        }
+
+        // 種別ごとの見出し。GAS が返さない種別が来ても壊れないよう既定を用意する
+        const FI_FORM_ICONS = { in: '📥', out: '📤', inv: '🔢', product: '🏷️' };
+
+        /**
+         * getFormConfig の forms 配列を取り出す。
+         * 古いバージョンの GAS（forms を返さない）でも入荷・出荷は表示できるようにする
+         */
+        function getFormList(data) {
+            if (data && Array.isArray(data.forms) && data.forms.length) return data.forms;
+            return [
+                { kind: 'in', label: '入荷', url: (data && data.inFormUrl) || '', editUrl: (data && data.inFormEditUrl) || '' },
+                { kind: 'out', label: '出荷', url: (data && data.outFormUrl) || '', editUrl: (data && data.outFormEditUrl) || '' }
+            ];
+        }
+
+        function renderFormCards(forms) {
+            const wrap = document.getElementById('fi-form-cards');
+            if (!wrap) return;
+            wrap.innerHTML = forms.map(f => {
+                // kind は id と onclick の文字列リテラルに埋め込むので、英数字だけに絞る
+                const kind = String(f.kind || '').replace(/[^A-Za-z0-9_-]/g, '');
+                if (!kind) return '';
+                const icon = FI_FORM_ICONS[f.kind] || '📄';
+                return `<div class="fi-form-card">
+                        <h3>${icon} ${escapeHtml(f.label || f.kind)}フォーム</h3>
+                        <p class="fi-url"><a id="fi-${kind}-url" href="#" target="_blank" rel="noopener"></a></p>
+                        <div class="btn-group">
+                            <button class="btn btn-primary" onclick="openFormUrl('${kind}')">フォームを開く</button>
+                            <button class="btn btn-info" onclick="toggleFormQr('${kind}')">🔲 QRコード</button>
+                            <a id="fi-${kind}-edit" class="btn btn-secondary" href="#" target="_blank" rel="noopener">編集画面</a>
+                        </div>
+                        <div id="fi-${kind}-qr" class="fi-qr hidden"></div>
+                    </div>`;
+            }).join('');
+            forms.forEach(f => {
+                const kind = String(f.kind || '').replace(/[^A-Za-z0-9_-]/g, '');
+                if (kind) setFormLink(kind, f.url, f.editUrl);
+            });
         }
 
         function setFormLink(kind, url, editUrl) {
@@ -884,7 +983,8 @@
 
         function getFormUrl(kind) {
             if (!formIntegrationData) return '';
-            return kind === 'in' ? (formIntegrationData.inFormUrl || '') : (formIntegrationData.outFormUrl || '');
+            const found = getFormList(formIntegrationData).find(f => f.kind === kind);
+            return (found && found.url) || '';
         }
 
         function openFormUrl(kind) {
@@ -947,7 +1047,7 @@
                 showToast('API が設定されていません', 'error');
                 return;
             }
-            if (!confirm('「処理結果」が空のフォーム回答をすべて処理します。\n（処理済みの行は変更されません）\n\n実行しますか？')) {
+            if (!confirm('「処理結果」が空のフォーム回答をすべて処理します（入荷・出荷・棚卸・商品登録）。\n（処理済みの行は変更されません）\n\n実行しますか？')) {
                 return;
             }
             showToast('🔄 未処理の回答を処理中...', 'success');
@@ -955,9 +1055,218 @@
                 const res = await apiProcessPendingResponses();
                 if (!res || !res.success) throw new Error(res && res.error ? res.error : '再処理に失敗しました');
                 const p = res.processed || {};
-                showFormActionResult(`✅ 再処理が完了しました（入荷 ${p.in || 0} 件 / 出荷 ${p.out || 0} 件 / エラー ${p.errors || 0} 件）`, (p.errors ? 'error' : 'success'));
+                const labels = { in: '入荷', out: '出荷', inv: '棚卸', product: '商品登録' };
+                const parts = Object.keys(p)
+                    .filter(k => k !== 'errors')
+                    .map(k => `${labels[k] || k} ${p[k] || 0} 件`);
+                parts.push(`エラー ${p.errors || 0} 件`);
+                showFormActionResult('✅ 再処理が完了しました（' + parts.join(' / ') + '）', (p.errors ? 'error' : 'success'));
             } catch (e) {
                 showFormActionResult('❌ 再処理に失敗: ' + escapeHtml(e.message || e), 'error');
+            }
+        }
+
+        // ========================================
+        // バックアップと復元
+        // ========================================
+
+        let backupList = [];
+        let backupStatus = null;
+        let backupPreview = null;   // 「変更点を確認」で得た内容。復元はこれと一致するときだけ有効
+
+        async function loadBackups(showToastOnDone) {
+            const notConfigured = document.getElementById('bk-not-configured');
+            const loading = document.getElementById('bk-loading');
+            const errorBox = document.getElementById('bk-error');
+            const content = document.getElementById('bk-content');
+            if (!notConfigured) return;
+
+            if (typeof isApiEnabled !== 'function' || !isApiEnabled() || typeof apiGetBackupStatus !== 'function') {
+                notConfigured.classList.remove('hidden');
+                content.classList.add('hidden');
+                return;
+            }
+
+            notConfigured.classList.add('hidden');
+            errorBox.classList.add('hidden');
+            loading.classList.remove('hidden');
+            try {
+                const [statusRes, listRes] = await Promise.all([apiGetBackupStatus(), apiListBackups(0)]);
+                loading.classList.add('hidden');
+                if (!statusRes || !statusRes.success) throw new Error(statusRes && statusRes.error ? statusRes.error : '状態の取得に失敗しました');
+                backupStatus = statusRes.data || {};
+                backupList = (listRes && listRes.success && Array.isArray(listRes.data)) ? listRes.data : [];
+                renderBackupStatus();
+                renderBackupSelect();
+                content.classList.remove('hidden');
+                if (showToastOnDone) showToast('バックアップの一覧を更新しました', 'success');
+            } catch (e) {
+                loading.classList.add('hidden');
+                content.classList.add('hidden');
+                errorBox.innerHTML = '❌ バックアップの情報を取得できませんでした: ' + escapeHtml(e.message || e) +
+                    '<br>GAS を「新しいバージョン」でデプロイしているか確認してください。';
+                errorBox.classList.remove('hidden');
+            }
+        }
+
+        function renderBackupStatus() {
+            const s = backupStatus || {};
+            const items = [
+                { label: '保存されている世代', value: (s.count || 0) + ' / ' + (s.maxBackups || 0), ok: (s.count || 0) > 0 },
+                { label: '最新', value: s.latest ? (s.latest.at + '（' + s.latest.reason + '）') : 'なし', ok: !!s.latest },
+                { label: '棚卸フォームの前', value: s.beforeFormInventory ? '自動で取る' : '取らない', ok: !!s.beforeFormInventory },
+                { label: 'アプリの棚卸の前', value: s.beforeAppInventory ? '自動で取る' : '取らない', ok: !!s.beforeAppInventory },
+                { label: '在庫保存の前', value: s.beforeStockSave ? '自動で取る' : '取らない', ok: !!s.beforeStockSave },
+                { label: '毎日', value: s.daily ? (s.dailyHour + '時に取る') : '取らない', ok: !!s.daily }
+            ];
+            document.getElementById('bk-status').innerHTML = items.map(it =>
+                `<div class="fi-status-item ${it.ok ? 'ok' : 'ng'}"><div class="label">${escapeHtml(it.label)}</div><div class="value">${escapeHtml(it.value)}</div></div>`
+            ).join('');
+        }
+
+        function renderBackupSelect() {
+            const sel = document.getElementById('bk-select');
+            if (!backupList.length) {
+                sel.innerHTML = '<option value="">（バックアップがありません）</option>';
+            } else {
+                sel.innerHTML = backupList.map(b =>
+                    `<option value="${escapeHtml(b.backupId)}">${escapeHtml(b.at)}｜${escapeHtml(b.reason)}｜${b.count} 件${b.actor ? '｜' + escapeHtml(b.actor) : ''}</option>`
+                ).join('');
+            }
+            onBackupSelectionChanged();
+        }
+
+        // 選択やスコープを変えたら、確認済みのプレビューは無効にする
+        // （見た内容と違うものを復元してしまわないように）
+        function onBackupSelectionChanged() {
+            backupPreview = null;
+            document.getElementById('bk-restore-btn').disabled = true;
+            const preview = document.getElementById('bk-preview');
+            preview.classList.add('hidden');
+            preview.innerHTML = '';
+        }
+
+        function selectedBackupId() {
+            const sel = document.getElementById('bk-select');
+            return sel ? sel.value : '';
+        }
+        function selectedScope() {
+            const sel = document.getElementById('bk-scope');
+            return sel ? sel.value : 'stock';
+        }
+
+        function showBackupResult(html, type) {
+            const box = document.getElementById('bk-result');
+            box.className = (type === 'error' ? 'error-box' : 'success-box');
+            box.innerHTML = html;
+            box.classList.remove('hidden');
+        }
+
+        async function createBackupNow() {
+            if (typeof isApiEnabled !== 'function' || !isApiEnabled()) {
+                showToast('API が設定されていません', 'error');
+                return;
+            }
+            showToast('🔄 バックアップを作成中...', 'success');
+            try {
+                const res = await apiCreateBackup('手動', '管理画面', '');
+                if (!res || !res.success) throw new Error(res && res.error ? res.error : 'バックアップに失敗しました');
+                showBackupResult(`✅ バックアップを作成しました（${escapeHtml(res.backupId)} / 商品 ${res.count} 件）`, 'success');
+                await loadBackups(false);
+            } catch (e) {
+                showBackupResult('❌ バックアップに失敗: ' + escapeHtml(e.message || e), 'error');
+            }
+        }
+
+        async function previewRestoreNow() {
+            const backupId = selectedBackupId();
+            if (!backupId) {
+                showToast('復元するバックアップを選んでください', 'error');
+                return;
+            }
+            const scope = selectedScope();
+            showToast('🔍 変更点を確認中...', 'success');
+            try {
+                const res = await apiPreviewRestore(backupId, scope);
+                if (!res || !res.success) throw new Error(res && res.error ? res.error : '確認に失敗しました');
+                backupPreview = { backupId, scope, data: res.data };
+                renderRestorePreview(res.data);
+                document.getElementById('bk-restore-btn').disabled = false;
+            } catch (e) {
+                backupPreview = null;
+                document.getElementById('bk-restore-btn').disabled = true;
+                showBackupResult('❌ 確認に失敗: ' + escapeHtml(e.message || e), 'error');
+            }
+        }
+
+        function renderRestorePreview(d) {
+            const box = document.getElementById('bk-preview');
+            const parts = [];
+            parts.push(`<div class="info-box"><strong>${escapeHtml(d.backupId)}</strong> を「${escapeHtml(d.scopeLabel)}」で復元すると:</div>`);
+            if (!d.changeCount) {
+                parts.push('<div class="success-box">値が変わる商品はありません（既にこの内容です）。</div>');
+            } else {
+                parts.push(`<p style="margin:8px 0;">値が変わる商品: <strong>${d.changeCount}</strong> 件` +
+                    (d.truncated ? `（先頭 ${d.changes.length} 件のみ表示）` : '') + '</p>');
+                const rows = [];
+                d.changes.forEach(c => {
+                    c.fields.forEach((f, i) => {
+                        rows.push(`<tr>
+                            <td>${i === 0 ? escapeHtml(c.name || c.code) : ''}</td>
+                            <td>${i === 0 ? escapeHtml(c.code) : ''}</td>
+                            <td>${escapeHtml(f.label)}</td>
+                            <td class="bk-from">${escapeHtml(f.from) || '(空)'}</td>
+                            <td class="bk-to">${escapeHtml(f.to) || '(空)'}</td>
+                        </tr>`);
+                    });
+                });
+                parts.push('<div class="bk-table-wrap"><table class="bk-table"><thead><tr>' +
+                    '<th>商品名</th><th>コード</th><th>項目</th><th>いま</th><th>復元後</th></tr></thead><tbody>' +
+                    rows.join('') + '</tbody></table></div>');
+            }
+            if (d.added && d.added.length) {
+                parts.push(`<p style="margin-top:8px;">このバックアップより後に追加された商品（そのまま残ります）: ` +
+                    escapeHtml(d.added.map(a => (a.name || a.code)).join('、')) + '</p>');
+            }
+            if (d.missing && d.missing.length) {
+                parts.push(`<div class="warning-box" style="margin-top:8px;">バックアップにありますが、いまの商品管理にありません（復活しません）: ` +
+                    escapeHtml(d.missing.map(a => (a.name || a.code)).join('、')) + '</div>');
+            }
+            box.innerHTML = parts.join('');
+            box.classList.remove('hidden');
+        }
+
+        async function restoreBackupNow() {
+            const backupId = selectedBackupId();
+            const scope = selectedScope();
+            if (!backupId) {
+                showToast('復元するバックアップを選んでください', 'error');
+                return;
+            }
+            // 「変更点を確認」で見た内容と同じものだけを復元させる
+            if (!backupPreview || backupPreview.backupId !== backupId || backupPreview.scope !== scope) {
+                showToast('先に「変更点を確認」を押してください', 'error');
+                document.getElementById('bk-restore-btn').disabled = true;
+                return;
+            }
+            const count = backupPreview.data.changeCount || 0;
+            if (!confirm(`${backupId} の内容で商品管理シートを復元します。\n` +
+                `範囲: ${backupPreview.data.scopeLabel}\n値が変わる商品: ${count} 件\n\n` +
+                '復元の直前の状態も自動で控えられるので、あとから取り消せます。\n\n実行しますか？')) {
+                return;
+            }
+            showToast('🔄 復元中...', 'success');
+            try {
+                const res = await apiRestoreBackup(backupId, scope, '管理画面');
+                if (!res || !res.success) throw new Error(res && res.error ? res.error : '復元に失敗しました');
+                showBackupResult(
+                    `✅ ${escapeHtml(res.backupId)} から復元しました（範囲: ${escapeHtml(res.scopeLabel)} / 値が変わった商品 ${res.restoredCount} 件）<br>` +
+                    `この復元を取り消すには、バックアップ <strong>${escapeHtml(res.undoBackupId)}</strong>（きっかけ「復元前」）を同じ範囲で復元してください。<br>` +
+                    'アプリ側は「🔄 更新」を押すと最新の在庫が表示されます。', 'success');
+                onBackupSelectionChanged();
+                await loadBackups(false);
+            } catch (e) {
+                showBackupResult('❌ 復元に失敗: ' + escapeHtml(e.message || e), 'error');
             }
         }
 

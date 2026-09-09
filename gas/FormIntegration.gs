@@ -24,12 +24,16 @@ var FI_SHEETS_ = {
   STAFF: '入力者',
   LEDGER: '箱台帳',
   IN_RESP: 'フォーム回答_入荷',
-  OUT_RESP: 'フォーム回答_出荷'
+  OUT_RESP: 'フォーム回答_出荷',
+  INV_RESP: 'フォーム回答_棚卸',
+  PRODUCT_RESP: 'フォーム回答_商品登録'
 };
 
 var FI_FORM_TITLES_ = {
   IN: 'お守り入荷登録',
-  OUT: 'お守り出荷登録'
+  OUT: 'お守り出荷登録',
+  INV: 'お守り棚卸登録',
+  PRODUCT: 'お守り商品登録'
 };
 
 // フォームの質問タイトル（回答シートのヘッダー名にもなる。変更する場合はフォームも作り直す）
@@ -37,25 +41,47 @@ var FI_Q_ = {
   STAFF: '入力者',
   IN_DATE: '入荷日',
   OUT_DATE: '出荷日',
+  INV_DATE: '棚卸日',
+  ACTUAL: '実在庫数',  // 実在庫数1, 実在庫数2, ...（棚卸）
   PRODUCT: '商品',    // 商品1, 商品2, ...
   BOXES: '箱数',      // 箱数1, 箱数2, ...
   PIECES: '端数',     // 端数1, ...（出荷のみ。箱に満たない個数）
   DEST: '出荷先',
-  NOTE: '備考'
+  NOTE: '備考',
+  // 商品登録フォーム
+  PRODUCT_NAME: '商品名',
+  PRODUCT_CODE: '商品コード',
+  UNIT: '入数',
+  UNIT_PRICE: '単価（税込）',
+  SAFE_STOCK: '安心在庫',
+  INIT_STOCK: '初期在庫',
+  SUPPLIER: '発注先',
+  CONTACT: '担当者',
+  EMAIL: 'メールアドレス'
 };
+
+// 商品コードは英大文字のみ 1〜12文字。
+// この制約は js/app.js:904 の parseQrCode（/^([A-Z]+)-(\d{2})-(\d{4})$/）に由来する。
+// 数字・小文字・記号を含むコードは QR ラベルの読み取りが一切通らないため、
+// 設定シートで変更できるようにはしていない（緩めると以後に作られた商品の
+// スキャンが黙って壊れ、原因が分からなくなる）。
+var FI_CODE_PATTERN_ = /^[A-Z]{1,12}$/;
+var FI_CODE_PATTERN_TEXT_ = '^[A-Z]{1,12}$';
 
 var FI_IN_SLOTS_ = 10;   // 入荷フォームの商品枠数
 var FI_OUT_SLOTS_ = 3;   // 出荷フォームの商品枠数
+var FI_INV_SLOTS_ = 10;  // 棚卸フォームの商品枠数
 
 // 回答シートに GAS が追記する列
-var FI_RESULT_COLS_ = ['処理結果', '処理日時', '在庫反映内容', 'ラベル番号範囲', 'PDF URL', 'エラー'];
+var FI_RESULT_COLS_ = ['処理結果', '処理日時', '在庫反映内容', 'ラベル番号範囲', 'PDF URL', 'バックアップ', 'エラー'];
 
 var FI_STATUS_ = {
   PROCESSING: '処理中',
   STOCK_DONE: '在庫反映済',
   DONE: '完了',
   PDF_FAILED: '在庫反映済/PDF失敗',
-  ERROR: 'エラー'
+  ERROR: 'エラー',
+  SYNC_FAILED: '登録済/選択肢同期失敗'
 };
 
 var FI_LEDGER_HEADERS_ = ['qrCode', 'productCode', 'year', 'boxNumber', 'status', 'issuedAt', 'source', 'inAt', 'outAt', 'ref', 'note'];
@@ -76,6 +102,15 @@ var FI_CONFIG_DEFAULTS_ = [
   ['outFormEditUrl', '', '出荷フォーム 編集用URL（自動設定）'],
   ['inResponseSheet', 'フォーム回答_入荷', '入荷の回答シート名'],
   ['outResponseSheet', 'フォーム回答_出荷', '出荷の回答シート名'],
+  ['invFormId', '', '棚卸フォームID（自動設定）'],
+  ['invFormUrl', '', '棚卸フォーム 回答用URL（自動設定）'],
+  ['invFormEditUrl', '', '棚卸フォーム 編集用URL（自動設定）'],
+  ['invResponseSheet', 'フォーム回答_棚卸', '棚卸の回答シート名'],
+  ['maxInventoryCount', 100000, '棚卸で1商品に入力できる実在庫数の上限（桁の入力ミス対策）'],
+  ['productFormId', '', '商品登録フォームID（自動設定）'],
+  ['productFormUrl', '', '商品登録フォーム 回答用URL（自動設定）'],
+  ['productFormEditUrl', '', '商品登録フォーム 編集用URL（自動設定）'],
+  ['productResponseSheet', 'フォーム回答_商品登録', '商品登録の回答シート名'],
   ['offsetX_mm', 0, 'ラベル印字位置の微調整 横（mm、右が＋）'],
   ['offsetY_mm', 0, 'ラベル印字位置の微調整 縦（mm、下が＋）'],
   ['maxBoxesPerLine', 50, '1商品あたりの箱数上限（フォーム）'],
@@ -93,7 +128,13 @@ var FI_CONFIG_DEFAULTS_ = [
   ['senderAddress', '', '署名の住所（〒から1行）'],
   ['senderTel', '', '署名の電話番号'],
   ['senderFax', '', '署名のFAX番号'],
-  ['senderMobile', '', '署名の携帯番号']
+  ['senderMobile', '', '署名の携帯番号'],
+  ['maxBackups', 30, 'バックアップの保持世代数（超えた分は古い順に削除）'],
+  ['backupBeforeFormInventory', 'TRUE', '棚卸フォームの反映前に自動バックアップする（TRUE/FALSE）'],
+  ['backupBeforeAppInventory', 'TRUE', 'アプリの棚卸反映前に自動バックアップする（TRUE/FALSE）'],
+  ['backupBeforeStockSave', 'FALSE', '在庫管理画面の「在庫を保存」前に自動バックアップする（TRUE/FALSE・既定OFF）'],
+  ['dailyBackup', 'FALSE', '毎日決まった時刻に自動バックアップする（TRUE/FALSE・既定OFF）'],
+  ['dailyBackupHour', 3, '毎日バックアップの時刻（0〜23）']
 ];
 
 // ========================================
@@ -197,6 +238,245 @@ function nowJa_() {
 }
 
 // ========================================
+// 1.5 フォーム種別の仕様表
+// ========================================
+//
+// 入荷・出荷・棚卸・商品登録は「フォームを作る → 回答シートを読む → 商品管理へ反映する」
+// という同じ流れを共有している。種別ごとの違いはすべてこの表に集約してあり、
+// createIntakeForm_ / getResponseSheet_ / syncFormChoices / processPendingResponses /
+// processResponseRow_ は表を引くだけになっている。
+// 種別を増やすときは、この表に1件足して handle（ロック内の反映）と
+// postLock（ロック外のPDF・メール）を書けばよい。
+
+var FI_KIND_ORDER_ = ['in', 'out', 'inv', 'product'];
+
+var FI_ROLE_ = { STAFF: 'staff', PRODUCT: 'product' };
+
+var FI_WHOLE_NUMBER_ = { kind: 'wholeNumber', help: '整数を入力してください' };
+var FI_STAFF_PLACEHOLDER_ = '（入力者シートを設定後に syncFormChoices を実行）';
+var FI_PRODUCT_PLACEHOLDER_ = '（商品マスタを設定後に syncFormChoices を実行）';
+
+function fiListQuestion_(title, required, help, choices, role) {
+  return { type: 'list', title: title, required: !!required, help: help || '', choices: choices || [], role: role || null };
+}
+function fiTextQuestion_(title, required, help, validation) {
+  return { type: 'text', title: title, required: !!required, help: help || '', validation: validation || null };
+}
+function fiDateQuestion_(title, required, help) {
+  return { type: 'date', title: title, required: !!required, help: help || '' };
+}
+function fiParagraphQuestion_(title, required, help) {
+  return { type: 'paragraph', title: title, required: !!required, help: help || '' };
+}
+
+var FI_FORM_SPECS_CACHE_ = null;
+
+function buildFormSpecs_() {
+  var specs = {};
+
+  specs['in'] = {
+    kind: 'in',
+    label: '入荷',
+    formTitle: FI_FORM_TITLES_.IN,
+    description: '届いた箱の数を登録します。送信すると在庫に反映され、箱に貼るラベル（QR付き）のPDFが入力者宛にメールで届きます。',
+    confirmation: '登録しました。在庫に反映し、ラベルPDFを入力者宛にメールします（届くまで1〜2分かかることがあります）。',
+    formIdKey: 'inFormId', formUrlKey: 'inFormUrl', formEditUrlKey: 'inFormEditUrl',
+    sheetKey: 'inResponseSheet', sheetDefault: FI_SHEETS_.IN_RESP,
+    slots: FI_IN_SLOTS_,
+    dateTitle: FI_Q_.IN_DATE,
+    sign: 1,              // 在庫を増やす
+    hasPieces: false,     // 端数欄なし
+    hasDest: false,       // 出荷先欄なし
+    reserveBoxes: true,   // 箱台帳に採番して登録する
+    checkLowStock: false,
+    head: [
+      fiListQuestion_(FI_Q_.STAFF, true, 'ご自身の名前を選んでください（入力者シートに登録された人）', [FI_STAFF_PLACEHOLDER_], FI_ROLE_.STAFF),
+      fiDateQuestion_(FI_Q_.IN_DATE, false, '空欄の場合は送信日になります（QRの年はこの日付の西暦下2桁）')
+    ],
+    // スロットの質問は「枠1だけ必須」。required は枠1にのみ適用される（formQuestionPlan_ 参照）
+    slotQuestions: [
+      fiListQuestion_(FI_Q_.PRODUCT, true, '', [FI_PRODUCT_PLACEHOLDER_], FI_ROLE_.PRODUCT),
+      fiTextQuestion_(FI_Q_.BOXES, true, '届いた箱の数（1以上の整数）', FI_WHOLE_NUMBER_)
+    ],
+    tail: [fiParagraphQuestion_(FI_Q_.NOTE, false)],
+    handle: handleStockLines_,
+    postLock: postLockIntake_
+  };
+
+  specs['out'] = {
+    kind: 'out',
+    label: '出荷',
+    formTitle: FI_FORM_TITLES_.OUT,
+    description: '倉庫から持ち出した数を登録します。送信すると在庫から減算されます。',
+    confirmation: '登録しました。在庫に反映します。',
+    formIdKey: 'outFormId', formUrlKey: 'outFormUrl', formEditUrlKey: 'outFormEditUrl',
+    sheetKey: 'outResponseSheet', sheetDefault: FI_SHEETS_.OUT_RESP,
+    slots: FI_OUT_SLOTS_,
+    dateTitle: FI_Q_.OUT_DATE,
+    sign: -1,             // 在庫を減らす（0未満にはしない）
+    hasPieces: true,
+    hasDest: true,
+    reserveBoxes: false,
+    checkLowStock: true,
+    head: [
+      fiListQuestion_(FI_Q_.STAFF, true, 'ご自身の名前を選んでください（入力者シートに登録された人）', [FI_STAFF_PLACEHOLDER_], FI_ROLE_.STAFF),
+      fiDateQuestion_(FI_Q_.OUT_DATE, false, '空欄の場合は送信日になります')
+    ],
+    slotQuestions: [
+      fiListQuestion_(FI_Q_.PRODUCT, true, '', [FI_PRODUCT_PLACEHOLDER_], FI_ROLE_.PRODUCT),
+      fiTextQuestion_(FI_Q_.BOXES, true, '持ち出した箱の数（整数。箱単位でなければ 0 にして端数に個数を入力）', FI_WHOLE_NUMBER_),
+      fiTextQuestion_(FI_Q_.PIECES, false, '箱に満たない個数（任意）', FI_WHOLE_NUMBER_)
+    ],
+    tail: [
+      fiTextQuestion_(FI_Q_.DEST, false, '授与所名など（任意）', null),
+      fiParagraphQuestion_(FI_Q_.NOTE, false)
+    ],
+    handle: handleStockLines_,
+    postLock: postLockShipping_
+  };
+
+  specs['inv'] = {
+    kind: 'inv',
+    label: '棚卸',
+    formTitle: FI_FORM_TITLES_.INV,
+    description: '数えた実際の在庫数を登録します。送信すると、入力した商品だけ在庫がその数に置き換わります（入力していない商品はそのままです）。反映の前に自動でバックアップを取ります。',
+    confirmation: '登録しました。入力した商品の在庫を、数えた数に置き換えます。',
+    formIdKey: 'invFormId', formUrlKey: 'invFormUrl', formEditUrlKey: 'invFormEditUrl',
+    sheetKey: 'invResponseSheet', sheetDefault: FI_SHEETS_.INV_RESP,
+    slots: FI_INV_SLOTS_,
+    dateTitle: FI_Q_.INV_DATE,
+    head: [
+      fiListQuestion_(FI_Q_.STAFF, true, 'ご自身の名前を選んでください（入力者シートに登録された人）', [FI_STAFF_PLACEHOLDER_], FI_ROLE_.STAFF),
+      fiDateQuestion_(FI_Q_.INV_DATE, false, '空欄の場合は送信日になります')
+    ],
+    slotQuestions: [
+      fiListQuestion_(FI_Q_.PRODUCT, true, '', [FI_PRODUCT_PLACEHOLDER_], FI_ROLE_.PRODUCT),
+      fiTextQuestion_(FI_Q_.ACTUAL, true, '数えた実際の個数（箱数ではなく個数）。0 と空欄は意味が違います: 0 は「在庫ゼロ」、空欄は「数えていない」です', FI_WHOLE_NUMBER_)
+    ],
+    tail: [fiParagraphQuestion_(FI_Q_.NOTE, false)],
+    handle: handleInventory_,
+    postLock: null
+  };
+
+  specs['product'] = {
+    kind: 'product',
+    label: '商品登録',
+    formTitle: FI_FORM_TITLES_.PRODUCT,
+    description: '商品マスタに無い授与品を登録します。棚卸や入荷の途中で未登録の品が出てきたときに使ってください。初期在庫を入れれば、登録と在庫の計上が1回の送信で済みます。',
+    confirmation: '登録しました。商品マスタに追加し、他のフォームの選択肢にも反映します（反映まで1分ほどかかることがあります）。',
+    formIdKey: 'productFormId', formUrlKey: 'productFormUrl', formEditUrlKey: 'productFormEditUrl',
+    sheetKey: 'productResponseSheet', sheetDefault: FI_SHEETS_.PRODUCT_RESP,
+    slots: 0,
+    dateTitle: null,
+    head: [
+      fiListQuestion_(FI_Q_.STAFF, true, 'ご自身の名前を選んでください（入力者シートに登録された人）', [FI_STAFF_PLACEHOLDER_], FI_ROLE_.STAFF),
+      fiTextQuestion_(FI_Q_.PRODUCT_NAME, true, '例: 交通安全御守', null),
+      fiTextQuestion_(FI_Q_.PRODUCT_CODE, true,
+        '英大文字のみ 1〜12文字（例: KOTSU）。数字・小文字・記号・スペース・全角は使えません。' +
+        'QRラベルの読み取りに使うため、この形でないとスキャンできなくなります',
+        { kind: 'pattern', help: '英大文字のみ 1〜12文字で入力してください（例: KOTSU）', pattern: FI_CODE_PATTERN_TEXT_ }),
+      fiTextQuestion_(FI_Q_.UNIT, true, '1箱あたりの個数（1以上の整数）', FI_WHOLE_NUMBER_),
+      fiTextQuestion_(FI_Q_.UNIT_PRICE, false, '1個あたりの税込単価（任意。空欄なら0）', FI_WHOLE_NUMBER_),
+      fiTextQuestion_(FI_Q_.SAFE_STOCK, false, 'これを下回ると警告します（任意。空欄なら10）', FI_WHOLE_NUMBER_),
+      fiTextQuestion_(FI_Q_.INIT_STOCK, false, '今ある個数（任意。空欄なら0）。棚卸や入荷の途中で見つけた品はここに個数を入れれば、この1回で在庫の計上まで済みます', FI_WHOLE_NUMBER_),
+      fiTextQuestion_(FI_Q_.SUPPLIER, false, '発注先の会社名（任意）', null),
+      fiTextQuestion_(FI_Q_.CONTACT, false, '発注先の担当者名（任意）', null),
+      fiTextQuestion_(FI_Q_.EMAIL, false, '発注先のメールアドレス（任意。見積依頼に使います）', null)
+    ],
+    slotQuestions: [],
+    tail: [fiParagraphQuestion_(FI_Q_.NOTE, false)],
+    handle: handleProductRegister_,
+    postLock: postLockProduct_,
+    postFailStatus: FI_STATUS_.SYNC_FAILED,
+    postFailSubject: 'フォームの選択肢の同期に失敗',
+    postFailLead: '商品の登録は完了していますが、フォームの選択肢の同期に失敗しました。',
+    postFailHint: '管理画面の「選択肢を同期」を押してください（毎朝6時にも自動で同期されます）。'
+  };
+
+  return specs;
+}
+
+function getFormSpecs_() {
+  if (!FI_FORM_SPECS_CACHE_) FI_FORM_SPECS_CACHE_ = buildFormSpecs_();
+  return FI_FORM_SPECS_CACHE_;
+}
+
+function getFormSpec_(kind) {
+  return getFormSpecs_()[kind] || null;
+}
+
+/**
+ * 回答シート名（設定シートで変更できる）
+ */
+function responseSheetName_(spec) {
+  return getConfigValue_(spec.sheetKey, spec.sheetDefault);
+}
+
+/**
+ * 回答シート名から種別を引く
+ */
+function kindForResponseSheet_(sheetName) {
+  var found = null;
+  FI_KIND_ORDER_.forEach(function(kind) {
+    if (found) return;
+    var spec = getFormSpec_(kind);
+    if (spec && sheetName === responseSheetName_(spec)) found = kind;
+  });
+  return found;
+}
+
+/**
+ * 仕様表から、フォームに並べる質問を順番どおりに展開する
+ * @return {Array<{q:Object, title:string, required:boolean, slot:number|undefined}>}
+ */
+function formQuestionPlan_(spec) {
+  var plan = [];
+  (spec.head || []).forEach(function(q) {
+    plan.push({ q: q, title: q.title, required: !!q.required });
+  });
+  for (var i = 1; i <= (spec.slots || 0); i++) {
+    (spec.slotQuestions || []).forEach(function(q) {
+      // 枠1だけ必須にする（枠2以降を必須にすると1商品だけの送信ができなくなる）
+      plan.push({ q: q, title: q.title + i, required: !!q.required && i === 1, slot: i });
+    });
+  }
+  (spec.tail || []).forEach(function(q) {
+    plan.push({ q: q, title: q.title, required: !!q.required });
+  });
+  return plan;
+}
+
+function buildTextValidation_(v) {
+  var b = FormApp.createTextValidation().setHelpText(v.help || '');
+  if (v.kind === 'wholeNumber') b = b.requireWholeNumber();
+  else if (v.kind === 'pattern') b = b.requireTextMatchesPattern(v.pattern);
+  else throw new Error('未知の入力検証: ' + v.kind);
+  return b.build();
+}
+
+function addFormQuestion_(form, q, title, required) {
+  var item;
+  if (q.type === 'list') {
+    item = form.addListItem().setTitle(title).setRequired(!!required);
+    if (q.help) item.setHelpText(q.help);
+    item.setChoiceValues(q.choices && q.choices.length ? q.choices : ['（未設定）']);
+  } else if (q.type === 'text') {
+    item = form.addTextItem().setTitle(title).setRequired(!!required);
+    if (q.help) item.setHelpText(q.help);
+    if (q.validation) item.setValidation(buildTextValidation_(q.validation));
+  } else if (q.type === 'date') {
+    item = form.addDateItem().setTitle(title).setRequired(!!required);
+    if (q.help) item.setHelpText(q.help);
+  } else if (q.type === 'paragraph') {
+    item = form.addParagraphTextItem().setTitle(title).setRequired(!!required);
+    if (q.help) item.setHelpText(q.help);
+  } else {
+    throw new Error('未知の質問タイプ: ' + q.type);
+  }
+  return item;
+}
+
+// ========================================
 // 2. セットアップ
 // ========================================
 
@@ -235,11 +515,15 @@ function setupFormIntegration() {
   }
 
   var forms = ensureForms_(ss, folder);
-  log.push('入荷フォーム: ' + forms.inForm.getPublishedUrl());
-  log.push('出荷フォーム: ' + forms.outForm.getPublishedUrl());
+  FI_KIND_ORDER_.forEach(function(kind) {
+    log.push(getFormSpec_(kind).label + 'フォーム: ' + forms[kind].getPublishedUrl());
+  });
+
+  ensureBackupSheets_();
+  log.push('バックアップ台帳・明細シート: OK');
 
   ensureTriggers_(ss);
-  log.push('トリガー: OK（onFormSubmit / syncFormChoices 毎日6時 / processPendingResponses 10分毎）');
+  log.push('トリガー: OK（onFormSubmit / syncFormChoices 毎日6時 / processPendingResponses 10分毎 / dailyBackupJob）');
 
   var sync = syncFormChoices();
   log.push('選択肢の同期: 商品 ' + sync.products + ' 件 / 入力者 ' + sync.staff + ' 件');
@@ -279,18 +563,16 @@ function ensureSheetWithHeaders_(ss, name, headers, color) {
  * 入荷・出荷フォームを作成（未作成のときだけ）し、スプレッドシートに紐づける
  */
 function ensureForms_(ss, folder) {
-  var inForm = openFormIfExists_(getConfigValue_('inFormId', ''));
-  if (!inForm) {
-    inForm = createIntakeForm_(ss, folder, 'in');
-  }
-  var outForm = openFormIfExists_(getConfigValue_('outFormId', ''));
-  if (!outForm) {
-    outForm = createIntakeForm_(ss, folder, 'out');
-  }
-  // 回答シートの追記列を確認
-  ensureResponseSheetColumns_(getResponseSheet_('in'));
-  ensureResponseSheetColumns_(getResponseSheet_('out'));
-  return { inForm: inForm, outForm: outForm };
+  var forms = {};
+  FI_KIND_ORDER_.forEach(function(kind) {
+    var spec = getFormSpec_(kind);
+    var form = openFormIfExists_(getConfigValue_(spec.formIdKey, ''));
+    if (!form) form = createIntakeForm_(ss, folder, kind);
+    forms[kind] = form;
+    // 回答シートの追記列を確認
+    ensureResponseSheetColumns_(getResponseSheet_(kind));
+  });
+  return forms;
 }
 
 function openFormIfExists_(formId) {
@@ -303,53 +585,27 @@ function openFormIfExists_(formId) {
 }
 
 function createIntakeForm_(ss, folder, kind) {
-  var isIn = kind === 'in';
-  var form = FormApp.create(isIn ? FI_FORM_TITLES_.IN : FI_FORM_TITLES_.OUT);
-  form.setDescription(isIn
-    ? '届いた箱の数を登録します。送信すると在庫に反映され、箱に貼るラベル（QR付き）のPDFが入力者宛にメールで届きます。'
-    : '倉庫から持ち出した数を登録します。送信すると在庫から減算されます。');
+  var spec = getFormSpec_(kind);
+  if (!spec) throw new Error('未知のフォーム種別: ' + kind);
+
+  var form = FormApp.create(spec.formTitle);
+  form.setDescription(spec.description);
   form.setCollectEmail(false);
   form.setLimitOneResponsePerUser(false);
   form.setAllowResponseEdits(false);
   form.setShowLinkToRespondAgain(true);
-  form.setConfirmationMessage(isIn
-    ? '登録しました。在庫に反映し、ラベルPDFを入力者宛にメールします（届くまで1〜2分かかることがあります）。'
-    : '登録しました。在庫に反映します。');
+  form.setConfirmationMessage(spec.confirmation);
 
-  // 入力者
-  form.addListItem().setTitle(FI_Q_.STAFF).setRequired(true)
-    .setHelpText('ご自身の名前を選んでください（入力者シートに登録された人）')
-    .setChoiceValues(['（入力者シートを設定後に syncFormChoices を実行）']);
-
-  // 日付
-  form.addDateItem().setTitle(isIn ? FI_Q_.IN_DATE : FI_Q_.OUT_DATE).setRequired(false)
-    .setHelpText('空欄の場合は送信日になります' + (isIn ? '（QRの年はこの日付の西暦下2桁）' : ''));
-
-  var slots = isIn ? FI_IN_SLOTS_ : FI_OUT_SLOTS_;
-  for (var i = 1; i <= slots; i++) {
-    form.addListItem().setTitle(FI_Q_.PRODUCT + i).setRequired(i === 1)
-      .setChoiceValues(['（商品マスタを設定後に syncFormChoices を実行）']);
-    var boxes = form.addTextItem().setTitle(FI_Q_.BOXES + i).setRequired(i === 1)
-      .setHelpText(isIn ? '届いた箱の数（1以上の整数）' : '持ち出した箱の数（整数。箱単位でなければ 0 にして端数に個数を入力）');
-    boxes.setValidation(FormApp.createTextValidation().setHelpText('整数を入力してください').requireWholeNumber().build());
-    if (!isIn) {
-      var pieces = form.addTextItem().setTitle(FI_Q_.PIECES + i).setRequired(false)
-        .setHelpText('箱に満たない個数（任意）');
-      pieces.setValidation(FormApp.createTextValidation().setHelpText('整数を入力してください').requireWholeNumber().build());
-    }
-  }
-
-  if (!isIn) {
-    form.addTextItem().setTitle(FI_Q_.DEST).setRequired(false).setHelpText('授与所名など（任意）');
-  }
-  form.addParagraphTextItem().setTitle(FI_Q_.NOTE).setRequired(false);
+  formQuestionPlan_(spec).forEach(function(entry) {
+    addFormQuestion_(form, entry.q, entry.title, entry.required);
+  });
 
   // 回答先をスプレッドシートに設定 → 新しくできた回答シートを見つけてリネーム
   var beforeNames = ss.getSheets().map(function(s) { return s.getName(); });
   form.setDestination(FormApp.DestinationType.SPREADSHEET, ss.getId());
   SpreadsheetApp.flush();
   var respSheet = findNewResponseSheet_(ss.getId(), form.getId(), beforeNames);
-  var targetName = isIn ? getConfigValue_('inResponseSheet', FI_SHEETS_.IN_RESP) : getConfigValue_('outResponseSheet', FI_SHEETS_.OUT_RESP);
+  var targetName = responseSheetName_(spec);
   if (respSheet) {
     var ssFresh = SpreadsheetApp.openById(ss.getId());
     if (ssFresh.getSheetByName(targetName) && respSheet.getName() !== targetName) {
@@ -369,9 +625,9 @@ function createIntakeForm_(ss, folder, kind) {
     // 移動できなくても動作に支障なし
   }
 
-  setConfigValue_(isIn ? 'inFormId' : 'outFormId', form.getId());
-  setConfigValue_(isIn ? 'inFormUrl' : 'outFormUrl', form.getPublishedUrl());
-  setConfigValue_(isIn ? 'inFormEditUrl' : 'outFormEditUrl', form.getEditUrl());
+  setConfigValue_(spec.formIdKey, form.getId());
+  setConfigValue_(spec.formUrlKey, form.getPublishedUrl());
+  setConfigValue_(spec.formEditUrlKey, form.getEditUrl());
   return form;
 }
 
@@ -393,9 +649,9 @@ function findNewResponseSheet_(spreadsheetId, formId, beforeNames) {
 }
 
 function getResponseSheet_(kind) {
-  var ss = getSpreadsheet();
-  var name = kind === 'in' ? getConfigValue_('inResponseSheet', FI_SHEETS_.IN_RESP) : getConfigValue_('outResponseSheet', FI_SHEETS_.OUT_RESP);
-  return ss.getSheetByName(name);
+  var spec = getFormSpec_(kind);
+  if (!spec) return null;
+  return getSpreadsheet().getSheetByName(responseSheetName_(spec));
 }
 
 /**
@@ -430,6 +686,14 @@ function ensureTriggers_(ss) {
   if (!existing['processPendingResponses']) {
     ScriptApp.newTrigger('processPendingResponses').timeBased().everyMinutes(10).create();
   }
+  // 毎日バックアップのトリガーは常に設置する。実行するかどうかは発火時に
+  // 設定シートの dailyBackup を読んで決めるので、設定を切り替えるだけで
+  // 有効化でき、トリガーの再設置も Web アプリの再デプロイも要らない。
+  if (!existing['dailyBackupJob']) {
+    var hour = Number(getConfigValue_('dailyBackupHour', 3));
+    if (!isFinite(hour) || hour < 0 || hour > 23) hour = 3;
+    ScriptApp.newTrigger('dailyBackupJob').timeBased().atHour(hour).everyDays(1).create();
+  }
 }
 
 // ========================================
@@ -451,16 +715,25 @@ function syncFormChoices() {
   if (!staffChoices.length) staffChoices = ['（入力者シートに名前を登録してください）'];
 
   var updated = 0;
-  ['inFormId', 'outFormId'].forEach(function(key) {
-    var form = openFormIfExists_(getConfigValue_(key, ''));
+  FI_KIND_ORDER_.forEach(function(kind) {
+    var spec = getFormSpec_(kind);
+    var form = openFormIfExists_(getConfigValue_(spec.formIdKey, ''));
     if (!form) return;
+    // タイトル → 役割 の対応表を仕様から作る。
+    // 「商品」の前方一致で判定すると、商品登録フォームの「商品名」「商品コード」まで
+    // 商品スロットと誤認して選択肢で上書きしてしまう。
+    var roles = {};
+    formQuestionPlan_(spec).forEach(function(entry) {
+      if (entry.q.role) roles[entry.title] = entry.q.role;
+    });
     form.getItems(FormApp.ItemType.LIST).forEach(function(item) {
-      var title = item.getTitle();
+      var role = roles[item.getTitle()];
+      if (!role) return;
       var list = item.asListItem();
-      if (title === FI_Q_.STAFF) {
+      if (role === FI_ROLE_.STAFF) {
         list.setChoiceValues(staffChoices);
         updated++;
-      } else if (title.indexOf(FI_Q_.PRODUCT) === 0) {
+      } else if (role === FI_ROLE_.PRODUCT) {
         list.setChoiceValues(productChoices);
         updated++;
       }
@@ -541,8 +814,11 @@ function onFormSubmit(e) {
  * 未処理（処理結果が空）の回答行をすべて処理する（トリガーの取りこぼし対策・手動再処理）
  */
 function processPendingResponses() {
-  var results = { in: 0, out: 0, errors: 0 };
-  ['in', 'out'].forEach(function(kind) {
+  var results = {};
+  FI_KIND_ORDER_.forEach(function(kind) { results[kind] = 0; });
+  results.errors = 0;
+
+  FI_KIND_ORDER_.forEach(function(kind) {
     var sheet = getResponseSheet_(kind);
     if (!sheet) return;
     ensureResponseSheetColumns_(sheet);
@@ -581,10 +857,9 @@ function processPendingResponses() {
 function processResponseRow_(sheet, row, opts) {
   opts = opts || {};
   var sheetName = sheet.getName();
-  var kind = null;
-  if (sheetName === getConfigValue_('inResponseSheet', FI_SHEETS_.IN_RESP)) kind = 'in';
-  else if (sheetName === getConfigValue_('outResponseSheet', FI_SHEETS_.OUT_RESP)) kind = 'out';
+  var kind = kindForResponseSheet_(sheetName);
   if (!kind) return { status: 'skipped', message: '対象外のシート: ' + sheetName };
+  var spec = getFormSpec_(kind);
 
   ensureResponseSheetColumns_(sheet);
   var ref = sheetName + '!R' + row;
@@ -597,7 +872,7 @@ function processResponseRow_(sheet, row, opts) {
     return { status: 'locked' };
   }
 
-  var rowData, lines, staff, summaryText, labelItems = [], lowStock = [];
+  var rowData, staff, summaryText, c, post = {};
   try {
     rowData = readRowMap_(sheet, row);
     var currentStatus = String(rowData.map['処理結果'] || '');
@@ -611,73 +886,37 @@ function processResponseRow_(sheet, row, opts) {
     writeResultCells_(sheet, row, { '処理結果': FI_STATUS_.PROCESSING, '処理日時': nowJa_(), 'エラー': '' });
     SpreadsheetApp.flush();
 
-    var products = getProductsData().data;
-    lines = parseLines_(kind, rowData.map, products);
     staff = resolveStaff_(rowData.map[FI_Q_.STAFF]);
-    var staffName = String(rowData.map[FI_Q_.STAFF] || '').trim() || '不明';
-    var dateValue = rowData.map[kind === 'in' ? FI_Q_.IN_DATE : FI_Q_.OUT_DATE];
-    var baseDate = toDate_(dateValue) || toDate_(rowData.values[0]) || new Date();
-    var yy = yearSuffix_(baseDate);
-    var dest = kind === 'out' ? String(rowData.map[FI_Q_.DEST] || '').trim() : '';
+    var baseDate = toDate_(spec.dateTitle ? rowData.map[spec.dateTitle] : null) || toDate_(rowData.values[0]) || new Date();
+    c = {
+      spec: spec,
+      kind: kind,
+      sheet: sheet,
+      row: row,
+      ref: ref,
+      rowData: rowData,
+      map: rowData.map,
+      products: getProductsData().data,
+      staff: staff,
+      staffName: String(rowData.map[FI_Q_.STAFF] || '').trim() || '不明',
+      baseDate: baseDate,
+      yy: yearSuffix_(baseDate)
+    };
 
     // --- 在庫・履歴・発注の更新（ここは業務上重要なので先に確定させる） ---
-    var summaryLines = [];
-    lines.forEach(function(line) {
-      var p = products[line.code];
-      var before = Number(p.stock) || 0;
-      var after = kind === 'in' ? before + line.quantity : Math.max(0, before - line.quantity);
-      var partial = { stock: after };
-      if (kind === 'in') {
-        var consumed = consumeDeliveries_(p, line.quantity);
-        if (consumed) {
-          partial.ordered = consumed.ordered;
-          partial.deliveries = consumed.deliveries;
-        }
-      }
-      updateSingleProduct(line.code, partial);
+    var handled = spec.handle(c) || {};
+    summaryText = handled.summary || '';
+    post = handled.post || {};
 
-      var note = kind === 'in'
-        ? 'フォーム入荷: ' + line.boxes + '箱 入力者:' + staffName
-        : 'フォーム出荷: ' + line.boxes + '箱' + (line.pieces ? '(+' + line.pieces + '個)' : '') + ' 入力者:' + staffName + (dest ? ' 出荷先:' + dest : '');
-      addHistoryRecord({
-        date: nowJa_(),
-        type: kind,
-        productCode: line.code,
-        productName: p.name,
-        quantity: line.quantity,
-        note: note
-      });
-
-      summaryLines.push(p.name + '（' + line.code + '）: ' + (kind === 'in' ? '+' : '-') + line.quantity + '個 → 在庫 ' + after + '個');
-
-      if (kind === 'out') {
-        var safe = Number(p.safeStock) || 0;
-        if (after < safe) lowStock.push({ code: line.code, name: p.name, stock: after, safeStock: safe });
-      }
-      line.after = after;
-      line.name = p.name;
-      line.unitQuantity = Number(p.quantity) || 0;
-    });
-
-    // --- 箱台帳: 採番と登録（入荷のみ） ---
-    var rangeText = '';
-    if (kind === 'in') {
-      var rangeParts = [];
-      lines.forEach(function(line) {
-        var numbers = reserveBoxNumbers_(line.code, yy, line.boxes, 'form', ref);
-        labelItems.push({ productCode: line.code, productName: line.name, unitQuantity: line.unitQuantity, year: yy, numbers: numbers });
-        rangeParts.push(formatQrText_(line.code, yy, numbers[0]) + '〜' + pad4_(numbers[numbers.length - 1]));
-      });
-      rangeText = rangeParts.join(', ');
-    }
-
-    summaryText = summaryLines.join('\n');
-    writeResultCells_(sheet, row, {
+    var cells = {
       '処理結果': FI_STATUS_.STOCK_DONE,
       '処理日時': nowJa_(),
       '在庫反映内容': summaryText,
-      'ラベル番号範囲': rangeText
-    });
+      'ラベル番号範囲': '',
+      'バックアップ': ''
+    };
+    Object.keys(handled.cells || {}).forEach(function(k) { cells[k] = handled.cells[k]; });
+    writeResultCells_(sheet, row, cells);
     SpreadsheetApp.flush();
   } catch (err) {
     writeResultCells_(sheet, row, { '処理結果': FI_STATUS_.ERROR, '処理日時': nowJa_(), 'エラー': String(err.message || err) });
@@ -691,29 +930,118 @@ function processResponseRow_(sheet, row, opts) {
 
   // --- ロック外: PDF 作成とメール（失敗しても在庫は確定済み） ---
   var recipient = (staff && staff.email) ? staff.email : getConfigValue_('adminEmail', '');
-  var staffLabel = String(rowData.map[FI_Q_.STAFF] || '').trim() || '不明';
+  var staffLabel = c.staffName;
   try {
-    if (kind === 'in') {
-      var labels = labelsFromBoxItems_(labelItems);
-      var fileName = 'ラベル_' + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyyMMdd_HHmm') + '_' +
-        labelItems.map(function(it) { return it.productCode; }).join('+').slice(0, 60);
-      var pdf = buildLabelPdf_(labels, { fileName: fileName });
-      sendLabelMail_(recipient, staffLabel, pdf, labelItems, summaryText, !(staff && staff.email));
-      writeResultCells_(sheet, row, { '処理結果': FI_STATUS_.DONE, '処理日時': nowJa_(), 'PDF URL': pdf.pdfFile.getUrl() });
-    } else {
-      if (lowStock.length && String(getConfigValue_('lowStockMail', 'TRUE')).toUpperCase() === 'TRUE') {
-        sendLowStockMail_(recipient, lowStock, staffLabel);
-      }
-      writeResultCells_(sheet, row, { '処理結果': FI_STATUS_.DONE, '処理日時': nowJa_() });
-    }
+    var doneCells = (spec.postLock ? spec.postLock(c, post, recipient, staffLabel, summaryText) : null) || {};
+    var finalCells = { '処理結果': FI_STATUS_.DONE, '処理日時': nowJa_() };
+    Object.keys(doneCells).forEach(function(k) { finalCells[k] = doneCells[k]; });
+    writeResultCells_(sheet, row, finalCells);
   } catch (err2) {
-    writeResultCells_(sheet, row, { '処理結果': FI_STATUS_.PDF_FAILED, '処理日時': nowJa_(), 'エラー': String(err2.message || err2) });
-    sendAdminMail_('【お守り在庫】ラベルPDF/メールの作成に失敗（' + ref + '）',
-      '在庫の反映は完了していますが、PDF作成またはメール送信に失敗しました。\n\n回答行: ' + ref + '\nエラー: ' + (err2.message || err2) +
-      '\n\n管理画面の「未処理の回答を再処理」ではなく、PDF再送（resendLabelPdf）を使ってください。\n\n' + (err2.stack || ''));
-    return { status: FI_STATUS_.PDF_FAILED, message: String(err2.message || err2) };
+    var failStatus = spec.postFailStatus || FI_STATUS_.PDF_FAILED;
+    writeResultCells_(sheet, row, { '処理結果': failStatus, '処理日時': nowJa_(), 'エラー': String(err2.message || err2) });
+    sendAdminMail_('【お守り在庫】' + (spec.postFailSubject || 'ラベルPDF/メールの作成に失敗') + '（' + ref + '）',
+      (spec.postFailLead || '在庫の反映は完了していますが、PDF作成またはメール送信に失敗しました。') +
+      '\n\n回答行: ' + ref + '\nエラー: ' + (err2.message || err2) +
+      '\n\n' + (spec.postFailHint || '管理画面の「未処理の回答を再処理」ではなく、PDF再送（resendLabelPdf）を使ってください。') + '\n\n' + (err2.stack || ''));
+    return { status: failStatus, message: String(err2.message || err2) };
   }
   return { status: FI_STATUS_.DONE };
+}
+
+/**
+ * 入荷・出荷の反映（ロック内）。仕様表の sign / hasDest / reserveBoxes / checkLowStock で分岐する。
+ *
+ * @param {Object} c processResponseRow_ が組み立てた処理コンテキスト
+ * @return {{summary:string, cells:Object, post:Object}}
+ */
+function handleStockLines_(c) {
+  var spec = c.spec;
+  var products = c.products;
+  var lines = parseLines_(c.kind, c.map, products);
+  var dest = spec.hasDest ? String(c.map[FI_Q_.DEST] || '').trim() : '';
+
+  var summaryLines = [];
+  var lowStock = [];
+  var labelItems = [];
+
+  lines.forEach(function(line) {
+    var p = products[line.code];
+    var before = Number(p.stock) || 0;
+    var after = spec.sign > 0 ? before + line.quantity : Math.max(0, before - line.quantity);
+    var partial = { stock: after };
+    if (spec.sign > 0) {
+      var consumed = consumeDeliveries_(p, line.quantity);
+      if (consumed) {
+        partial.ordered = consumed.ordered;
+        partial.deliveries = consumed.deliveries;
+      }
+    }
+    updateSingleProduct(line.code, partial);
+
+    var note = spec.sign > 0
+      ? 'フォーム入荷: ' + line.boxes + '箱 入力者:' + c.staffName
+      : 'フォーム出荷: ' + line.boxes + '箱' + (line.pieces ? '(+' + line.pieces + '個)' : '') + ' 入力者:' + c.staffName + (dest ? ' 出荷先:' + dest : '');
+    addHistoryRecord({
+      date: nowJa_(),
+      type: c.kind,
+      productCode: line.code,
+      productName: p.name,
+      quantity: line.quantity,
+      note: note
+    });
+
+    summaryLines.push(p.name + '（' + line.code + '）: ' + (spec.sign > 0 ? '+' : '-') + line.quantity + '個 → 在庫 ' + after + '個');
+
+    if (spec.checkLowStock) {
+      var safe = Number(p.safeStock) || 0;
+      if (after < safe) lowStock.push({ code: line.code, name: p.name, stock: after, safeStock: safe });
+    }
+    line.after = after;
+    line.name = p.name;
+    line.unitQuantity = Number(p.quantity) || 0;
+  });
+
+  // --- 箱台帳: 採番と登録（入荷のみ） ---
+  var rangeText = '';
+  if (spec.reserveBoxes) {
+    var rangeParts = [];
+    lines.forEach(function(line) {
+      var numbers = reserveBoxNumbers_(line.code, c.yy, line.boxes, 'form', c.ref);
+      labelItems.push({ productCode: line.code, productName: line.name, unitQuantity: line.unitQuantity, year: c.yy, numbers: numbers });
+      rangeParts.push(formatQrText_(line.code, c.yy, numbers[0]) + '〜' + pad4_(numbers[numbers.length - 1]));
+    });
+    rangeText = rangeParts.join(', ');
+  }
+
+  return {
+    summary: summaryLines.join('\n'),
+    cells: { 'ラベル番号範囲': rangeText },
+    post: { labelItems: labelItems, lowStock: lowStock }
+  };
+}
+
+/**
+ * 入荷のロック外処理: ラベルPDFを作って入力者へメールする
+ */
+function postLockIntake_(c, post, recipient, staffLabel, summaryText) {
+  var labelItems = post.labelItems || [];
+  var labels = labelsFromBoxItems_(labelItems);
+  var fileName = 'ラベル_' + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyyMMdd_HHmm') + '_' +
+    labelItems.map(function(it) { return it.productCode; }).join('+').slice(0, 60);
+  var pdf = buildLabelPdf_(labels, { fileName: fileName });
+  sendLabelMail_(recipient, staffLabel, pdf, labelItems, summaryText, !(c.staff && c.staff.email));
+  return { 'PDF URL': pdf.pdfFile.getUrl() };
+}
+
+/**
+ * 出荷のロック外処理: 安心在庫を下回っていれば通知する
+ */
+function postLockShipping_(c, post, recipient, staffLabel, summaryText) {
+  var lowStock = post.lowStock || [];
+  if (lowStock.length && String(getConfigValue_('lowStockMail', 'TRUE')).toUpperCase() === 'TRUE') {
+    sendLowStockMail_(recipient, lowStock, staffLabel);
+  }
+  return {};
 }
 
 /**
@@ -738,11 +1066,234 @@ function writeResultCells_(sheet, row, obj) {
 }
 
 /**
+ * 商品コードを検証する。黙って直さず、エラーで差し戻す。
+ *
+ * 大文字に揃えたり記号を落としたりしないのは、入力者が意図したコードと
+ * 登録されるコードが食い違うと、後からQRラベルを見ても原因が分からなくなるため。
+ * 制約の由来は FI_CODE_PATTERN_ のコメント（js/app.js:904 の parseQrCode）を参照。
+ */
+function validateProductCode_(raw) {
+  var s = String(raw === undefined || raw === null ? '' : raw).trim();
+  if (!s) throw new Error('商品コードを入力してください');
+  if (!FI_CODE_PATTERN_.test(s)) {
+    throw new Error('商品コードは英大文字のみ 1〜12文字で入力してください' +
+      '（数字・小文字・記号・スペース・全角は使えません）。入力値: ' + s);
+  }
+  return s;
+}
+
+/**
+ * 数値欄を読む。空欄は既定値（required なら エラー）
+ */
+function parseIntField_(raw, label, opts) {
+  opts = opts || {};
+  if (!hasAnswer_(raw)) {
+    if (opts.required) throw new Error(label + ' を入力してください');
+    return opts.def === undefined ? 0 : opts.def;
+  }
+  var n = Number(String(raw).trim());
+  if (!isFinite(n) || Math.floor(n) !== n) throw new Error(label + ' は整数で入力してください: ' + raw);
+  if (opts.min !== undefined && n < opts.min) throw new Error(label + ' は ' + opts.min + ' 以上で入力してください: ' + raw);
+  if (opts.max !== undefined && n > opts.max) throw new Error(label + ' は ' + opts.max + ' 以下で入力してください: ' + raw);
+  return n;
+}
+
+/**
+ * 商品登録の反映（ロック内）
+ */
+function handleProductRegister_(c) {
+  var map = c.map;
+  var products = c.products;
+
+  var name = String(map[FI_Q_.PRODUCT_NAME] === undefined || map[FI_Q_.PRODUCT_NAME] === null ? '' : map[FI_Q_.PRODUCT_NAME]).trim();
+  if (!name) throw new Error('商品名を入力してください');
+  var code = validateProductCode_(map[FI_Q_.PRODUCT_CODE]);
+
+  // addProduct（gas/Code.gs）の重複チェックは === なので大文字小文字を区別する。
+  // 'HEALTH' と 'Health' が別の商品として並ぶと QR がどちらにも当たらなくなるため、
+  // 大文字小文字を無視した重複走査をここで先に行う。
+  // （FI_CODE_PATTERN_ が小文字を弾くので現状は理論上の保険だが、
+  //   過去に手入力で作られた小文字混じりのコードが残っている場合に効く）
+  var upper = code.toUpperCase();
+  var dup = null;
+  Object.keys(products).forEach(function(existing) {
+    if (dup) return;
+    if (String(existing).trim().toUpperCase() === upper) dup = existing;
+  });
+  if (dup) {
+    throw new Error('商品コードが既に使われています: ' + dup +
+      (products[dup] && products[dup].name ? '（' + products[dup].name + '）' : '') + '。別のコードにしてください');
+  }
+
+  var unit = parseIntField_(map[FI_Q_.UNIT], '入数', { required: true, min: 1 });
+  var unitPrice = parseIntField_(map[FI_Q_.UNIT_PRICE], '単価（税込）', { min: 0, def: 0 });
+  var safeStock = parseIntField_(map[FI_Q_.SAFE_STOCK], '安心在庫', { min: 0, def: 10 });
+  var initStock = parseIntField_(map[FI_Q_.INIT_STOCK], '初期在庫', { min: 0, def: 0 });
+  var note = String(map[FI_Q_.NOTE] || '').trim();
+
+  var r = addProduct({
+    code: code,
+    name: name,
+    quantity: unit,
+    unitPrice: unitPrice,
+    supplier: String(map[FI_Q_.SUPPLIER] || '').trim(),
+    contact: String(map[FI_Q_.CONTACT] || '').trim(),
+    email: String(map[FI_Q_.EMAIL] || '').trim(),
+    stock: initStock,
+    safeStock: safeStock,
+    ordered: false
+  });
+  if (!r || !r.success) throw new Error(r && r.error ? r.error : '商品の登録に失敗しました');
+
+  if (initStock > 0) {
+    addHistoryRecord({
+      date: nowJa_(),
+      type: 'in',
+      productCode: code,
+      productName: name,
+      quantity: initStock,
+      note: 'フォーム商品登録: 初期在庫 入力者:' + c.staffName + (note ? ' ' + note : '')
+    });
+  }
+
+  var summary = '新しい商品を登録しました\n' +
+    name + '（' + code + '）: 入数 ' + unit + '個 / 単価 ' + unitPrice + '円 / 安心在庫 ' + safeStock + '個\n' +
+    (initStock > 0 ? '初期在庫 ' + initStock + '個を計上しました' : '初期在庫は 0個（在庫の計上なし）');
+
+  return { summary: summary, cells: {}, post: { code: code, name: name } };
+}
+
+/**
+ * 商品登録のロック外処理: 新しい商品を他のフォームの選択肢に出す。
+ * syncFormChoices は4フォームで10〜30秒かかるため、必ずロックの外で呼ぶ。
+ */
+function postLockProduct_(c, post, recipient, staffLabel, summaryText) {
+  var r = syncFormChoices();
+  Logger.log('postLockProduct_: syncFormChoices ' + JSON.stringify(r));
+  return {};
+}
+
+/**
+ * その欄に回答があったか。
+ *
+ * ★数値の 0 は「回答あり」。String(0) === '0' なので空文字と区別できる。
+ *   ここを if (!v) や if (v) に書き換えると、棚卸で「実在庫 0 個」が
+ *   「数えていない（未計上）」に化けて、在庫が実態と合わなくなる。
+ */
+function hasAnswer_(v) {
+  if (v === undefined || v === null) return false;
+  return String(v).trim() !== '';
+}
+
+/**
+ * 棚卸フォームの 商品n / 実在庫数n を検証して配列にする。
+ *
+ * 空欄と 0 の扱い:
+ *   商品も実在庫数も空 → 未計上（在庫を触らない）
+ *   実在庫数が 0      → 在庫ゼロとして反映する
+ *   どちらか片方だけ  → 入れ忘れとしてエラー（黙って捨てない）
+ *
+ * 入数は検証しない。棚卸は箱数ではなく絶対個数の申告なので、
+ * 入数が 0 のまま登録されている既存商品でも数えられる必要がある。
+ *
+ * @return {Array<{slot:number, code:string, name:string, before:number, actual:number, diff:number}>}
+ */
+function parseInventoryLines_(map, products) {
+  var spec = getFormSpec_('inv');
+  var slots = spec ? spec.slots : FI_INV_SLOTS_;
+  var maxCount = Number(getConfigValue_('maxInventoryCount', 100000));
+  if (!isFinite(maxCount) || maxCount < 1) maxCount = 100000;
+  var lines = [];
+  var seen = {};
+
+  for (var i = 1; i <= slots; i++) {
+    var choice = map[FI_Q_.PRODUCT + i];
+    var actualRaw = map[FI_Q_.ACTUAL + i];
+    var hasChoice = hasAnswer_(choice);
+    var hasActual = hasAnswer_(actualRaw);
+    if (!hasChoice && !hasActual) continue;   // 数えていない枠
+    if (!hasChoice) throw new Error('商品' + i + ' が選択されていません（実在庫数' + i + ' だけ入力されています）');
+    if (!hasActual) throw new Error('実在庫数' + i + ' が入力されていません（数えていないなら商品' + i + ' も空にしてください。0 は「在庫ゼロ」の意味になります）');
+
+    var code = extractProductCode_(choice);
+    var p = products[code];
+    // 未知のコードをここで止める。updateSingleProduct は未知コードを追記するため、
+    // 通してしまうと商品管理シートに中身の無い行ができる。
+    if (!p) throw new Error('商品' + i + ' のコードが商品マスタにありません: ' + choice + '（商品登録フォームで先に登録してください）');
+    if (seen[code]) throw new Error('同じ商品が複数の枠に入力されています: ' + code + '（1つの枠にまとめてください）');
+    seen[code] = true;
+
+    var actual = Number(String(actualRaw).trim());
+    if (!isFinite(actual) || actual < 0 || Math.floor(actual) !== actual) {
+      throw new Error('実在庫数' + i + ' は 0 以上の整数で入力してください: ' + actualRaw);
+    }
+    if (actual > maxCount) {
+      throw new Error('実在庫数' + i + ' が上限（' + maxCount + '個）を超えています: ' + actual + '（桁の入力ミスではありませんか）');
+    }
+
+    var before = Number(p.stock) || 0;
+    lines.push({ slot: i, code: code, name: p.name, before: before, actual: actual, diff: actual - before });
+  }
+
+  if (!lines.length) throw new Error('商品が1つも入力されていません');
+  return lines;
+}
+
+/**
+ * 棚卸の反映（ロック内）。
+ *
+ * ★処理順は「解析 → バックアップ → 書き込み」。
+ *   先にバックアップを取ると、入力ミスで解析に失敗しただけの回答でも
+ *   バックアップ世代を1つ消費し、本当に必要な世代を押し出してしまう。
+ */
+function handleInventory_(c) {
+  var products = c.products;
+  var lines = parseInventoryLines_(c.map, products);
+
+  var backupId = '';
+  if (getConfigFlag_('backupBeforeFormInventory', 'TRUE')) {
+    // ここは既に processResponseRow_ のロックの中。ロックを取らない takeBackup_ を使う
+    backupId = takeBackup_('棚卸(フォーム)', c.staffName, c.ref, {}).backupId;
+  }
+
+  var note = String(c.map[FI_Q_.NOTE] || '').trim();
+  var summaryLines = [];
+  var changed = 0;
+
+  lines.forEach(function(line) {
+    updateSingleProduct(line.code, { stock: line.actual });
+    if (line.diff !== 0) {
+      changed++;
+      addHistoryRecord({
+        date: nowJa_(),
+        type: line.diff > 0 ? 'in' : 'out',
+        productCode: line.code,
+        productName: line.name,
+        quantity: Math.abs(line.diff),
+        note: '棚卸(フォーム): ' + line.before + '→' + line.actual + ' (' + (line.diff > 0 ? '+' : '') + line.diff + ') 入力者:' + c.staffName + (note ? ' ' + note : '')
+      });
+    }
+    summaryLines.push(line.name + '（' + line.code + '）: ' + line.before + ' → ' + line.actual + '個' +
+      (line.diff === 0 ? '（差異なし）' : '（' + (line.diff > 0 ? '+' : '') + line.diff + '）'));
+  });
+
+  var untouched = Object.keys(products).length - lines.length;
+  summaryLines.push('計上 ' + lines.length + '件 / 差異あり ' + changed + '件 / 未計上 ' + untouched + '件');
+
+  return {
+    summary: summaryLines.join('\n'),
+    cells: { 'バックアップ': backupId },
+    post: { backupId: backupId, changed: changed }
+  };
+}
+
+/**
  * 回答行の 商品n / 箱数n / 端数n を検証して配列にする
  * @return {Array<{slot:number, code:string, boxes:number, pieces:number, quantity:number}>}
  */
 function parseLines_(kind, map, products) {
-  var slots = kind === 'in' ? FI_IN_SLOTS_ : FI_OUT_SLOTS_;
+  var spec = getFormSpec_(kind);
+  var slots = spec ? spec.slots : 0;
   var maxPerLine = Number(getConfigValue_('maxBoxesPerLine', 50)) || 50;
   var maxTotal = Number(getConfigValue_('maxBoxesPerSubmission', 80)) || 80;
   var lines = [];
@@ -753,9 +1304,9 @@ function parseLines_(kind, map, products) {
     var choice = map[FI_Q_.PRODUCT + i];
     var boxesRaw = map[FI_Q_.BOXES + i];
     var piecesRaw = map[FI_Q_.PIECES + i];
-    var hasChoice = choice !== undefined && choice !== null && String(choice).trim() !== '';
-    var hasBoxes = boxesRaw !== undefined && boxesRaw !== null && String(boxesRaw).trim() !== '';
-    var hasPieces = piecesRaw !== undefined && piecesRaw !== null && String(piecesRaw).trim() !== '';
+    var hasChoice = hasAnswer_(choice);
+    var hasBoxes = hasAnswer_(boxesRaw);
+    var hasPieces = hasAnswer_(piecesRaw);
     if (!hasChoice && !hasBoxes && !hasPieces) continue;
     if (!hasChoice) throw new Error('商品' + i + ' が選択されていません');
 
@@ -766,7 +1317,7 @@ function parseLines_(kind, map, products) {
     seen[code] = true;
 
     var boxes = hasBoxes ? Number(String(boxesRaw).trim()) : 0;
-    var pieces = (kind === 'out' && hasPieces) ? Number(String(piecesRaw).trim()) : 0;
+    var pieces = (spec.hasPieces && hasPieces) ? Number(String(piecesRaw).trim()) : 0;
     if (!isFinite(boxes) || boxes < 0 || Math.floor(boxes) !== boxes) throw new Error('箱数' + i + ' は 0 以上の整数で入力してください: ' + boxesRaw);
     if (!isFinite(pieces) || pieces < 0 || Math.floor(pieces) !== pieces) throw new Error('端数' + i + ' は 0 以上の整数で入力してください: ' + piecesRaw);
     if (kind === 'in' && boxes < 1) throw new Error('箱数' + i + ' は 1 以上で入力してください');
@@ -1009,6 +1560,390 @@ function ledgerMark_(qrCodes, status, source, ref) {
 }
 
 // ========================================
+// 6.5 バックアップと復元
+// ========================================
+//
+// 棚卸は在庫を絶対値で上書きするため、取り違えると元に戻す手段が無い。
+// そこで「商品管理シートの行そのもの」を2枚のシートに台帳として貯める。
+//
+//   バックアップ台帳: 1世代1行（backupId / 日時 / きっかけ / 実行者 / 商品数 / 備考）
+//   バックアップ明細: 1世代 商品数ぶんの行（backupId + 商品管理の A〜K 列）
+//
+// シートを copyTo() で複製しない理由: copyTo は使用範囲ではなくグリッド全体
+// （既定 1000×26 = 26,000 セル）を複製するため、30世代で 78 万セル（ブック上限の 7.8%）
+// を占める。さらにタブが増えると findNewResponseSheet_ の予備ロジックが
+// バックアップシートを回答シートと誤認する危険がある。
+
+var FI_BACKUP_SHEETS_ = {
+  LEDGER: 'バックアップ台帳',
+  DETAIL: 'バックアップ明細'
+};
+
+var FI_BACKUP_LEDGER_HEADERS_ = ['backupId', '日時', 'きっかけ', '実行者', '商品数', '備考'];
+
+// 商品管理の A〜K 列を保存する。L（更新日時）は保存しない（復元時は「今」を刻む）
+var FI_PRODUCT_COLS_ = 11;
+var FI_PRODUCT_COL_LABELS_ = ['商品コード', '商品名', '入数', '単価（税込）', '発注先', '担当者', 'メールアドレス', '現在庫', '安心在庫', '発注状況', '発注数/納期'];
+var FI_BACKUP_DETAIL_HEADERS_ = ['backupId'].concat(FI_PRODUCT_COL_LABELS_);
+
+// 復元の範囲。cols は商品管理シートの列番号（1始まり）。A列（商品コード）は照合キーなので変えない
+var FI_RESTORE_SCOPES_ = {
+  stock: { label: '在庫のみ（現在庫・安心在庫）', cols: [8, 9] },
+  all: { label: 'すべて（商品名〜発注数/納期）', cols: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11] }
+};
+
+var FI_BACKUP_ID_PREFIX_ = 'BK_';
+var FI_RESTORE_ID_PREFIX_ = 'RS_';
+
+/**
+ * 設定シートの TRUE/FALSE を読む
+ */
+function getConfigFlag_(key, defaultValue) {
+  return String(getConfigValue_(key, defaultValue)).trim().toUpperCase() === 'TRUE';
+}
+
+function getProductsSheet_() {
+  var sheet = getSpreadsheet().getSheetByName(SHEET_NAMES.PRODUCTS);
+  if (!sheet) throw new Error('商品管理シートが見つかりません');
+  return sheet;
+}
+
+/**
+ * 商品管理の A〜K を読む（ヘッダー行を除き、商品コードのある行だけ）
+ */
+function readProductRows_() {
+  var sheet = getProductsSheet_();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { sheet: sheet, rows: [] };
+  var values = sheet.getRange(2, 1, lastRow - 1, FI_PRODUCT_COLS_).getValues();
+  var rows = [];
+  for (var i = 0; i < values.length; i++) {
+    if (String(values[i][0] === undefined || values[i][0] === null ? '' : values[i][0]).trim() === '') continue;
+    rows.push(values[i]);
+  }
+  return { sheet: sheet, rows: rows };
+}
+
+function ensureBackupSheets_() {
+  var ss = getSpreadsheet();
+  return {
+    ledger: ensureSheetWithHeaders_(ss, FI_BACKUP_SHEETS_.LEDGER, FI_BACKUP_LEDGER_HEADERS_, '#2e5d34'),
+    detail: ensureSheetWithHeaders_(ss, FI_BACKUP_SHEETS_.DETAIL, FI_BACKUP_DETAIL_HEADERS_, '#2e5d34')
+  };
+}
+
+/**
+ * BK_yyyyMMdd_HHmmss（同じ秒に2回走ったら _2, _3 …）。文字列順＝時系列順になる
+ */
+function nextBackupId_(ledger, prefix) {
+  var base = (prefix || FI_BACKUP_ID_PREFIX_) + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyyMMdd_HHmmss');
+  var existing = {};
+  var lastRow = ledger.getLastRow();
+  if (lastRow >= 2) {
+    ledger.getRange(2, 1, lastRow - 1, 1).getValues().forEach(function(r) {
+      var id = String(r[0] || '').trim();
+      if (id) existing[id] = true;
+    });
+  }
+  if (!existing[base]) return base;
+  for (var n = 2; n <= 99; n++) {
+    if (!existing[base + '_' + n]) return base + '_' + n;
+  }
+  throw new Error('backupId を採番できませんでした: ' + base);
+}
+
+/**
+ * 商品管理の現在の内容を1世代ぶん書き出す。
+ *
+ * ★この関数は ScriptLock を取らない。
+ *   棚卸フォームの処理（processResponseRow_）のロック内から呼ばれるため、
+ *   ここでロックを取ると 30 秒待って必ず例外になる（ScriptLock は再入できない）。
+ *   単独で呼ぶときは takeBackupLocked_ を使うこと。
+ *
+ * @param {string} reason きっかけ（「棚卸(フォーム)」「復元前」「手動」など）
+ * @param {string} actor 実行者
+ * @param {string} note 備考
+ * @param {{prune?:boolean}} opts prune:false で世代整理をしない（復元前の控えなど）
+ * @return {{backupId:string, count:number}}
+ */
+function takeBackup_(reason, actor, note, opts) {
+  opts = opts || {};
+  var sheets = ensureBackupSheets_();
+  var read = readProductRows_();
+  var id = nextBackupId_(sheets.ledger, FI_BACKUP_ID_PREFIX_);
+  if (read.rows.length) {
+    var out = read.rows.map(function(r) { return [id].concat(r); });
+    sheets.detail.getRange(sheets.detail.getLastRow() + 1, 1, out.length, FI_BACKUP_DETAIL_HEADERS_.length).setValues(out);
+  }
+  sheets.ledger.appendRow([id, nowJa_(), String(reason || ''), String(actor || ''), read.rows.length, String(note || '')]);
+  if (opts.prune !== false) pruneBackups_();
+  return { backupId: id, count: read.rows.length };
+}
+
+/**
+ * 単独で呼ぶとき用（Webアクション・毎日のジョブ）。ロック内からは呼ばないこと
+ */
+function takeBackupLocked_(reason, actor, note) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    return takeBackup_(reason, actor, note, {});
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * 保持世代数を超えた古いバックアップを消す。
+ * 台帳・明細とも「残す行だけ書き戻す」方式（行ごとの削除は行数が増えると遅いため）。
+ * 復元の記録（RS_）はバックアップ本体（BK_）とは別枠で数える。
+ */
+function pruneBackups_() {
+  var max = Number(getConfigValue_('maxBackups', 30));
+  if (!isFinite(max) || max < 1) max = 30;
+  var sheets = ensureBackupSheets_();
+  var lastRow = sheets.ledger.getLastRow();
+  if (lastRow < 2) return { removed: 0 };
+
+  var lcols = FI_BACKUP_LEDGER_HEADERS_.length;
+  var rows = sheets.ledger.getRange(2, 1, lastRow - 1, lcols).getValues()
+    .filter(function(r) { return String(r[0] || '').trim() !== ''; });
+
+  var drop = {};
+  [FI_BACKUP_ID_PREFIX_, FI_RESTORE_ID_PREFIX_].forEach(function(prefix) {
+    var group = rows.filter(function(r) { return String(r[0]).indexOf(prefix) === 0; });
+    if (group.length <= max) return;
+    group.slice(0, group.length - max).forEach(function(r) { drop[String(r[0])] = true; });
+  });
+  var dropIds = Object.keys(drop);
+  if (!dropIds.length) return { removed: 0 };
+
+  var keep = rows.filter(function(r) { return !drop[String(r[0])]; });
+  sheets.ledger.getRange(2, 1, lastRow - 1, lcols).clearContent();
+  if (keep.length) sheets.ledger.getRange(2, 1, keep.length, lcols).setValues(keep);
+
+  var dLast = sheets.detail.getLastRow();
+  if (dLast >= 2) {
+    var dcols = FI_BACKUP_DETAIL_HEADERS_.length;
+    var all = sheets.detail.getRange(2, 1, dLast - 1, dcols).getValues();
+    var keepDetail = all.filter(function(r) {
+      var id = String(r[0] || '').trim();
+      return id !== '' && !drop[id];
+    });
+    sheets.detail.getRange(2, 1, dLast - 1, dcols).clearContent();
+    if (keepDetail.length) sheets.detail.getRange(2, 1, keepDetail.length, dcols).setValues(keepDetail);
+  }
+  return { removed: dropIds.length };
+}
+
+/**
+ * バックアップ一覧（新しい順）。復元の記録（RS_）は含めない
+ */
+function listBackups_(limit) {
+  var sheets = ensureBackupSheets_();
+  var lastRow = sheets.ledger.getLastRow();
+  if (lastRow < 2) return [];
+  var values = sheets.ledger.getRange(2, 1, lastRow - 1, FI_BACKUP_LEDGER_HEADERS_.length).getValues();
+  var list = [];
+  values.forEach(function(r) {
+    var id = String(r[0] || '').trim();
+    if (id.indexOf(FI_BACKUP_ID_PREFIX_) !== 0) return;
+    list.push({
+      backupId: id,
+      at: cellText_(r[1]),
+      reason: String(r[2] || ''),
+      actor: String(r[3] || ''),
+      count: Number(r[4]) || 0,
+      note: String(r[5] || '')
+    });
+  });
+  list.reverse();
+  var n = Number(limit) || 0;
+  return n > 0 ? list.slice(0, n) : list;
+}
+
+function readBackupRows_(backupId) {
+  var id = String(backupId || '').trim();
+  if (!id) throw new Error('backupId を指定してください');
+  var sheets = ensureBackupSheets_();
+  var lastRow = sheets.detail.getLastRow();
+  var rows = [];
+  if (lastRow >= 2) {
+    var cols = FI_BACKUP_DETAIL_HEADERS_.length;
+    sheets.detail.getRange(2, 1, lastRow - 1, cols).getValues().forEach(function(r) {
+      if (String(r[0] || '').trim() === id) rows.push(r.slice(1));
+    });
+  }
+  if (!rows.length) {
+    throw new Error('バックアップが見つかりません: ' + id + '（保持世代数を超えて削除された可能性があります）');
+  }
+  return rows;
+}
+
+/**
+ * セルの値を比較用の文字列にする（数値の 100 と文字列の "100" を同じ値として扱う）
+ */
+function cellText_(v) {
+  if (v === undefined || v === null) return '';
+  if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss');
+  return String(v).trim();
+}
+
+function sameCellValue_(a, b) {
+  return cellText_(a) === cellText_(b);
+}
+
+function normalizeRestoreScope_(scope) {
+  return FI_RESTORE_SCOPES_[scope] ? scope : 'stock';
+}
+
+/**
+ * 復元したら何が変わるかを、書き込まずに調べる
+ * @return {{backupId, scope, scopeLabel, changes, changeCount, truncated, added, missing}}
+ *   changes: 値が変わる商品   added: バックアップに無いので据え置く商品
+ *   missing: バックアップにあるが今の商品管理に無い商品（復活させない）
+ */
+function previewRestore_(backupId, scope) {
+  var scopeKey = normalizeRestoreScope_(scope);
+  var sc = FI_RESTORE_SCOPES_[scopeKey];
+  var backupRows = readBackupRows_(backupId);
+  var byCode = {};
+  backupRows.forEach(function(r) { byCode[String(r[0] || '').trim()] = r; });
+
+  var read = readProductRows_();
+  var changes = [], added = [], missing = [], seen = {};
+  read.rows.forEach(function(cur) {
+    var code = String(cur[0] || '').trim();
+    var b = byCode[code];
+    if (!b) { added.push({ code: code, name: String(cur[1] || '') }); return; }
+    seen[code] = true;
+    var fields = [];
+    sc.cols.forEach(function(col) {
+      var idx = col - 1;
+      if (!sameCellValue_(cur[idx], b[idx])) {
+        fields.push({ label: FI_PRODUCT_COL_LABELS_[idx], from: cellText_(cur[idx]), to: cellText_(b[idx]) });
+      }
+    });
+    if (fields.length) changes.push({ code: code, name: String(cur[1] || ''), fields: fields });
+  });
+  Object.keys(byCode).forEach(function(code) {
+    if (!seen[code]) missing.push({ code: code, name: String(byCode[code][1] || '') });
+  });
+
+  var limit = 200;
+  return {
+    backupId: String(backupId),
+    scope: scopeKey,
+    scopeLabel: sc.label,
+    changes: changes.length > limit ? changes.slice(0, limit) : changes,
+    changeCount: changes.length,
+    truncated: changes.length > limit,
+    added: added,
+    missing: missing
+  };
+}
+
+/**
+ * バックアップから復元する。順序に意味がある。
+ *  1. ロックを取る
+ *  2. 先にバックアップ行を読む（この後の世代整理が復元元を消しても大丈夫なように）
+ *  3. 今の状態を「復元前」として控える（prune:false）→ 復元そのものを取り消せる
+ *  4. 商品管理を1回だけ読み、対象列だけ差し替えて1回で書き戻す
+ *  5. バックアップに無い商品は触らない（added）／バックアップにあって今無い商品は復活させない（missing）
+ *  6. 台帳に記録し管理者へ通知。履歴シートには書かない
+ *     （79商品の復元で履歴上限1000行の8%を消費してしまうため。監査記録は台帳が担う）
+ */
+function restoreBackup_(backupId, scope, actor) {
+  var scopeKey = normalizeRestoreScope_(scope);
+  var sc = FI_RESTORE_SCOPES_[scopeKey];
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var backupRows = readBackupRows_(backupId);
+    var byCode = {};
+    backupRows.forEach(function(r) { byCode[String(r[0] || '').trim()] = r; });
+
+    var pre = takeBackup_('復元前', actor || '', '復元元: ' + backupId, { prune: false });
+
+    var sheet = getProductsSheet_();
+    var lastRow = sheet.getLastRow();
+    var width = FI_PRODUCT_COLS_ + 1;   // L（更新日時）まで書き戻す
+    var grid = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, width).getValues() : [];
+    var stamp = nowJa_();
+    var restored = [], added = [], seen = {};
+
+    for (var i = 0; i < grid.length; i++) {
+      var row = grid[i];
+      var code = String(row[0] === undefined || row[0] === null ? '' : row[0]).trim();
+      if (!code) continue;
+      var b = byCode[code];
+      if (!b) { added.push({ code: code, name: String(row[1] || '') }); continue; }
+      seen[code] = true;
+      var changed = false;
+      for (var k = 0; k < sc.cols.length; k++) {
+        var idx = sc.cols[k] - 1;
+        if (!sameCellValue_(row[idx], b[idx])) { row[idx] = b[idx]; changed = true; }
+      }
+      if (changed) {
+        row[FI_PRODUCT_COLS_] = stamp;
+        restored.push({ code: code, name: String(row[1] || '') });
+      }
+    }
+    if (grid.length) sheet.getRange(2, 1, grid.length, width).setValues(grid);
+
+    var missing = [];
+    Object.keys(byCode).forEach(function(code) {
+      if (!seen[code]) missing.push({ code: code, name: String(byCode[code][1] || '') });
+    });
+
+    var sheets = ensureBackupSheets_();
+    sheets.ledger.appendRow([
+      nextBackupId_(sheets.ledger, FI_RESTORE_ID_PREFIX_),
+      nowJa_(), '復元', String(actor || ''), restored.length,
+      '復元元: ' + backupId + ' / 範囲: ' + sc.label + ' / 取り消し用: ' + pre.backupId +
+      (added.length ? ' / 据え置き ' + added.length + '件' : '') +
+      (missing.length ? ' / 復活させず ' + missing.length + '件' : '')
+    ]);
+
+    sendAdminMail_('【お守り在庫】バックアップから復元しました（' + backupId + '）',
+      '商品管理シートを ' + backupId + ' の内容で復元しました。\n' +
+      '範囲: ' + sc.label + '\n' +
+      '値が変わった商品: ' + restored.length + '件\n' +
+      'バックアップに無いため据え置いた商品: ' + added.length + '件\n' +
+      'バックアップにあるが現在の商品管理に無い商品（復活させていません）: ' + missing.length + '件\n\n' +
+      'この復元を取り消すには、バックアップ ' + pre.backupId + '（きっかけ「復元前」）を同じ範囲で復元してください。');
+
+    return {
+      success: true,
+      backupId: String(backupId),
+      scope: scopeKey,
+      scopeLabel: sc.label,
+      restored: restored,
+      restoredCount: restored.length,
+      added: added,
+      missing: missing,
+      undoBackupId: pre.backupId
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * 毎日のバックアップ。トリガーは常に設置してあり、実行するかどうかは
+ * 発火時に設定シートを読んで決める（設定を切り替えるだけで有効化できる）。
+ */
+function dailyBackupJob() {
+  if (!getConfigFlag_('dailyBackup', 'FALSE')) {
+    Logger.log('dailyBackupJob: 設定 dailyBackup が FALSE のため何もしません');
+    return { success: true, skipped: true };
+  }
+  var r = takeBackupLocked_('毎日', 'システム', '自動バックアップ');
+  Logger.log('dailyBackupJob: ' + JSON.stringify(r));
+  return { success: true, backupId: r.backupId, count: r.count };
+}
+
+// ========================================
 // 7. メール
 // ========================================
 
@@ -1139,6 +2074,32 @@ function routeExtended_(action, data, e) {
       return { success: true, updated: m.updated, added: m.added };
     }
 
+    case 'getBackupStatus':
+      return { success: true, data: getBackupStatus_() };
+
+    case 'listBackups':
+      return { success: true, data: listBackups_(Number(data.limit) || 0) };
+
+    case 'createBackup': {
+      var b = takeBackupLocked_(String(data.reason || '手動'), String(data.actor || '管理画面'), String(data.note || ''));
+      return { success: true, backupId: b.backupId, count: b.count };
+    }
+
+    case 'previewRestore': {
+      if (!data.backupId) return { success: false, error: 'backupId が必要です' };
+      return { success: true, data: previewRestore_(data.backupId, data.scope) };
+    }
+
+    case 'restoreBackup': {
+      if (!data.backupId) return { success: false, error: 'backupId が必要です' };
+      return restoreBackup_(data.backupId, data.scope, String(data.actor || '管理画面'));
+    }
+
+    case 'addHistoryBatch': {
+      var records = Array.isArray(data.records) ? data.records : [];
+      return addHistoryBatch(records);
+    }
+
     case 'createLabelPdf':
       return createLabelPdfAction_(data);
 
@@ -1162,13 +2123,32 @@ function getFormConfig_() {
   try { products = Object.keys(getProductsData().data).length; } catch (e) { products = 0; }
   var folderUrl = '';
   try { if (cfg.driveFolderId) folderUrl = DriveApp.getFolderById(cfg.driveFolderId).getUrl(); } catch (e) { folderUrl = ''; }
+
+  var forms = [];
+  var setupDone = true;
+  FI_KIND_ORDER_.forEach(function(kind) {
+    var spec = getFormSpec_(kind);
+    var url = String(cfg[spec.formUrlKey] || '');
+    if (!cfg[spec.formIdKey]) setupDone = false;
+    forms.push({
+      kind: kind,
+      label: spec.label,
+      title: spec.formTitle,
+      url: url,
+      editUrl: String(cfg[spec.formEditUrlKey] || ''),
+      responseSheet: responseSheetName_(spec)
+    });
+  });
+
   return {
     success: true,
     data: {
+      // 旧いバージョンの管理画面との互換のため、入荷・出荷は個別のキーでも返す
       inFormUrl: cfg.inFormUrl || '',
       inFormEditUrl: cfg.inFormEditUrl || '',
       outFormUrl: cfg.outFormUrl || '',
       outFormEditUrl: cfg.outFormEditUrl || '',
+      forms: forms,
       spreadsheetUrl: getSpreadsheet().getUrl(),
       folderUrl: folderUrl,
       adminEmail: cfg.adminEmail || '',
@@ -1178,11 +2158,46 @@ function getFormConfig_() {
       triggers: {
         onFormSubmit: !!handlers['onFormSubmit'],
         syncFormChoices: !!handlers['syncFormChoices'],
-        processPendingResponses: !!handlers['processPendingResponses']
+        processPendingResponses: !!handlers['processPendingResponses'],
+        dailyBackupJob: !!handlers['dailyBackupJob']
       },
-      setupDone: !!(cfg.inFormId && cfg.outFormId)
+      backup: getBackupStatus_(),
+      setupDone: setupDone
     }
   };
+}
+
+/**
+ * バックアップの状態（管理画面の表示用）。
+ * 台帳シートがまだ無いときは作らずに ready:false を返す（状態を見ただけでシートが増えないように）
+ */
+function getBackupStatus_() {
+  var status = {
+    ready: false,
+    count: 0,
+    latest: null,
+    maxBackups: Number(getConfigValue_('maxBackups', 30)) || 30,
+    beforeFormInventory: getConfigFlag_('backupBeforeFormInventory', 'TRUE'),
+    beforeAppInventory: getConfigFlag_('backupBeforeAppInventory', 'TRUE'),
+    beforeStockSave: getConfigFlag_('backupBeforeStockSave', 'FALSE'),
+    daily: getConfigFlag_('dailyBackup', 'FALSE'),
+    dailyHour: Number(getConfigValue_('dailyBackupHour', 3)) || 0,
+    scopes: [
+      { key: 'stock', label: FI_RESTORE_SCOPES_.stock.label },
+      { key: 'all', label: FI_RESTORE_SCOPES_.all.label }
+    ]
+  };
+  try {
+    var ss = getSpreadsheet();
+    if (!ss.getSheetByName(FI_BACKUP_SHEETS_.LEDGER)) return status;
+    var list = listBackups_(0);
+    status.ready = true;
+    status.count = list.length;
+    status.latest = list.length ? list[0] : null;
+  } catch (e) {
+    // スプレッドシート未初期化など
+  }
+  return status;
 }
 
 /**

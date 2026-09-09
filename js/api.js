@@ -553,3 +553,99 @@ async function apiCreateLabelPdf(params) {
 async function apiResendLabelPdf(sheet, row, to = '') {
     return await apiPost('resendLabelPdf', { sheet, row, to });
 }
+
+// ========================================
+// バックアップと復元（FormIntegration.gs）
+// ========================================
+
+/**
+ * バックアップの状態（世代数・最新・自動バックアップの設定）を取得
+ */
+async function apiGetBackupStatus() {
+    return await apiGet('getBackupStatus');
+}
+
+/**
+ * バックアップ一覧（新しい順）
+ * @param {number} limit 0 なら全件
+ */
+async function apiListBackups(limit = 0) {
+    return await apiPost('listBackups', { limit });
+}
+
+/**
+ * 商品管理シートの現在の内容をバックアップする
+ * @param {string} reason きっかけ（「手動」「棚卸前(アプリ)」など）
+ * @param {string} actor 実行者
+ * @param {string} note 備考
+ */
+async function apiCreateBackup(reason = '手動', actor = '管理画面', note = '') {
+    return await apiPost('createBackup', { reason, actor, note });
+}
+
+/**
+ * 復元したら何が変わるかを、書き込まずに確認する
+ * @param {string} backupId
+ * @param {'stock'|'all'} scope stock = 現在庫・安心在庫のみ / all = 商品名〜発注数/納期
+ */
+async function apiPreviewRestore(backupId, scope = 'stock') {
+    return await apiPost('previewRestore', { backupId, scope });
+}
+
+/**
+ * バックアップから復元する。復元前の状態も自動で控えられ、
+ * 戻り値の undoBackupId で復元自体を取り消せる
+ */
+async function apiRestoreBackup(backupId, scope = 'stock', actor = '管理画面') {
+    return await apiPost('restoreBackup', { backupId, scope, actor });
+}
+
+/**
+ * 履歴をまとめて追加する（棚卸の反映など）。
+ * URL長の制限があるため 30 件ずつに分けて送る（apiPost は GET でJSONを送るため）。
+ * 配列の順序は addHistory を順に呼んだときと同じ並びになる。
+ * @returns {Promise<{success:boolean, added:number, errors:string[]}>}
+ */
+async function apiAddHistoryBatch(records) {
+    const list = Array.isArray(records) ? records : [];
+    if (!list.length) return { success: true, added: 0, errors: [] };
+    const CHUNK = 30;
+    let added = 0;
+    const errors = [];
+    // 前から順に送る。addHistoryBatch は各まとまりを先頭に挿し込むので、
+    // この順で送ると最終的な並びが addHistory を配列の順に呼んだときと一致する
+    // （配列の最後の要素がシートの一番上に来る）
+    for (let i = 0; i < list.length; i += CHUNK) {
+        const chunk = list.slice(i, i + CHUNK);
+        try {
+            const res = await apiPost('addHistoryBatch', { records: chunk });
+            if (res && res.success) added += res.added || chunk.length;
+            else errors.push(res && res.error ? res.error : '履歴の追加に失敗しました');
+        } catch (e) {
+            errors.push(e.message || String(e));
+        }
+    }
+    return { success: errors.length === 0, added, errors };
+}
+
+/**
+ * 変更のあった商品だけ在庫を保存する。
+ *
+ * GAS 側の saveStockToProducts は `if (code && stock[code])` で部分更新に対応しているため、
+ * 送らなかった商品はシート上の値がそのまま残る。画面を開いてから他の経路
+ * （Googleフォームの入荷・出荷・棚卸、別の端末）で更新された商品を巻き戻さないよう、
+ * 全件ではなく差分だけを送ること。
+ *
+ * localStorage は更新しない（呼び出し側が画面の状態に合わせて保存すること）。
+ * @param {Object} changed { 商品コード: { stock, safeStock } }
+ */
+async function apiSaveStockPartial(changed) {
+    const codes = Object.keys(changed || {});
+    if (!codes.length) return { success: true, sent: 0 };
+    if (!isApiEnabled()) return { success: true, sent: 0 };
+    const res = await apiPost('saveStock', { stock: changed });
+    if (!res || !res.success) {
+        throw new Error(res && res.error ? res.error : '在庫の保存に失敗しました');
+    }
+    return { success: true, sent: codes.length };
+}

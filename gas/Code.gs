@@ -880,6 +880,48 @@ function addHistoryRecord(record) {
 }
 
 /**
+ * 履歴をまとめて追加する（棚卸の反映など、一度に何件も記録するとき用）
+ *
+ * 並びは addHistoryRecord を配列の順に呼んだときと同じになる
+ * （配列の後ろほど新しい＝シートの上に来る）。
+ * 1件ずつ呼ぶと挿入と書き込みが件数ぶん走るため、まとめて1回で行う。
+ */
+function addHistoryBatch(records) {
+  if (!Array.isArray(records) || records.length === 0) {
+    return { success: true, added: 0 };
+  }
+  const MAX_PER_CALL = 200;
+  if (records.length > MAX_PER_CALL) {
+    return { success: false, error: '一度に追加できる履歴は ' + MAX_PER_CALL + ' 件までです: ' + records.length + ' 件' };
+  }
+
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.HISTORY);
+  const now = new Date().toLocaleString('ja-JP');
+  const rows = records.slice().reverse().map(function(r) {
+    return [
+      r.date || now,
+      r.type,
+      r.productCode,
+      r.productName,
+      r.quantity,
+      r.note || ''
+    ];
+  });
+
+  sheet.insertRows(2, rows.length);
+  sheet.getRange(2, 1, rows.length, 6).setValues(rows);
+
+  // 履歴が1000件を超えたら古いものを削除
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1001) {
+    sheet.deleteRows(1002, lastRow - 1001);
+  }
+
+  return { success: true, added: rows.length };
+}
+
+/**
  * 単一の商品データを更新
  */
 function updateSingleProduct(productCode, productData) {
