@@ -2074,6 +2074,32 @@ function routeExtended_(action, data, e) {
       return { success: true, updated: m.updated, added: m.added };
     }
 
+    case 'getBackupStatus':
+      return { success: true, data: getBackupStatus_() };
+
+    case 'listBackups':
+      return { success: true, data: listBackups_(Number(data.limit) || 0) };
+
+    case 'createBackup': {
+      var b = takeBackupLocked_(String(data.reason || '手動'), String(data.actor || '管理画面'), String(data.note || ''));
+      return { success: true, backupId: b.backupId, count: b.count };
+    }
+
+    case 'previewRestore': {
+      if (!data.backupId) return { success: false, error: 'backupId が必要です' };
+      return { success: true, data: previewRestore_(data.backupId, data.scope) };
+    }
+
+    case 'restoreBackup': {
+      if (!data.backupId) return { success: false, error: 'backupId が必要です' };
+      return restoreBackup_(data.backupId, data.scope, String(data.actor || '管理画面'));
+    }
+
+    case 'addHistoryBatch': {
+      var records = Array.isArray(data.records) ? data.records : [];
+      return addHistoryBatch(records);
+    }
+
     case 'createLabelPdf':
       return createLabelPdfAction_(data);
 
@@ -2097,13 +2123,32 @@ function getFormConfig_() {
   try { products = Object.keys(getProductsData().data).length; } catch (e) { products = 0; }
   var folderUrl = '';
   try { if (cfg.driveFolderId) folderUrl = DriveApp.getFolderById(cfg.driveFolderId).getUrl(); } catch (e) { folderUrl = ''; }
+
+  var forms = [];
+  var setupDone = true;
+  FI_KIND_ORDER_.forEach(function(kind) {
+    var spec = getFormSpec_(kind);
+    var url = String(cfg[spec.formUrlKey] || '');
+    if (!cfg[spec.formIdKey]) setupDone = false;
+    forms.push({
+      kind: kind,
+      label: spec.label,
+      title: spec.formTitle,
+      url: url,
+      editUrl: String(cfg[spec.formEditUrlKey] || ''),
+      responseSheet: responseSheetName_(spec)
+    });
+  });
+
   return {
     success: true,
     data: {
+      // 旧いバージョンの管理画面との互換のため、入荷・出荷は個別のキーでも返す
       inFormUrl: cfg.inFormUrl || '',
       inFormEditUrl: cfg.inFormEditUrl || '',
       outFormUrl: cfg.outFormUrl || '',
       outFormEditUrl: cfg.outFormEditUrl || '',
+      forms: forms,
       spreadsheetUrl: getSpreadsheet().getUrl(),
       folderUrl: folderUrl,
       adminEmail: cfg.adminEmail || '',
@@ -2113,11 +2158,46 @@ function getFormConfig_() {
       triggers: {
         onFormSubmit: !!handlers['onFormSubmit'],
         syncFormChoices: !!handlers['syncFormChoices'],
-        processPendingResponses: !!handlers['processPendingResponses']
+        processPendingResponses: !!handlers['processPendingResponses'],
+        dailyBackupJob: !!handlers['dailyBackupJob']
       },
-      setupDone: !!(cfg.inFormId && cfg.outFormId)
+      backup: getBackupStatus_(),
+      setupDone: setupDone
     }
   };
+}
+
+/**
+ * バックアップの状態（管理画面の表示用）。
+ * 台帳シートがまだ無いときは作らずに ready:false を返す（状態を見ただけでシートが増えないように）
+ */
+function getBackupStatus_() {
+  var status = {
+    ready: false,
+    count: 0,
+    latest: null,
+    maxBackups: Number(getConfigValue_('maxBackups', 30)) || 30,
+    beforeFormInventory: getConfigFlag_('backupBeforeFormInventory', 'TRUE'),
+    beforeAppInventory: getConfigFlag_('backupBeforeAppInventory', 'TRUE'),
+    beforeStockSave: getConfigFlag_('backupBeforeStockSave', 'FALSE'),
+    daily: getConfigFlag_('dailyBackup', 'FALSE'),
+    dailyHour: Number(getConfigValue_('dailyBackupHour', 3)) || 0,
+    scopes: [
+      { key: 'stock', label: FI_RESTORE_SCOPES_.stock.label },
+      { key: 'all', label: FI_RESTORE_SCOPES_.all.label }
+    ]
+  };
+  try {
+    var ss = getSpreadsheet();
+    if (!ss.getSheetByName(FI_BACKUP_SHEETS_.LEDGER)) return status;
+    var list = listBackups_(0);
+    status.ready = true;
+    status.count = list.length;
+    status.latest = list.length ? list[0] : null;
+  } catch (e) {
+    // スプレッドシート未初期化など
+  }
+  return status;
 }
 
 /**
