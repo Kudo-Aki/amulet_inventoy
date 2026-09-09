@@ -93,7 +93,13 @@ var FI_CONFIG_DEFAULTS_ = [
   ['senderAddress', '', '署名の住所（〒から1行）'],
   ['senderTel', '', '署名の電話番号'],
   ['senderFax', '', '署名のFAX番号'],
-  ['senderMobile', '', '署名の携帯番号']
+  ['senderMobile', '', '署名の携帯番号'],
+  ['maxBackups', 30, 'バックアップの保持世代数（超えた分は古い順に削除）'],
+  ['backupBeforeFormInventory', 'TRUE', '棚卸フォームの反映前に自動バックアップする（TRUE/FALSE）'],
+  ['backupBeforeAppInventory', 'TRUE', 'アプリの棚卸反映前に自動バックアップする（TRUE/FALSE）'],
+  ['backupBeforeStockSave', 'FALSE', '在庫管理画面の「在庫を保存」前に自動バックアップする（TRUE/FALSE・既定OFF）'],
+  ['dailyBackup', 'FALSE', '毎日決まった時刻に自動バックアップする（TRUE/FALSE・既定OFF）'],
+  ['dailyBackupHour', 3, '毎日バックアップの時刻（0〜23）']
 ];
 
 // ========================================
@@ -420,8 +426,11 @@ function setupFormIntegration() {
     log.push(getFormSpec_(kind).label + 'フォーム: ' + forms[kind].getPublishedUrl());
   });
 
+  ensureBackupSheets_();
+  log.push('バックアップ台帳・明細シート: OK');
+
   ensureTriggers_(ss);
-  log.push('トリガー: OK（onFormSubmit / syncFormChoices 毎日6時 / processPendingResponses 10分毎）');
+  log.push('トリガー: OK（onFormSubmit / syncFormChoices 毎日6時 / processPendingResponses 10分毎 / dailyBackupJob）');
 
   var sync = syncFormChoices();
   log.push('選択肢の同期: 商品 ' + sync.products + ' 件 / 入力者 ' + sync.staff + ' 件');
@@ -583,6 +592,14 @@ function ensureTriggers_(ss) {
   }
   if (!existing['processPendingResponses']) {
     ScriptApp.newTrigger('processPendingResponses').timeBased().everyMinutes(10).create();
+  }
+  // 毎日バックアップのトリガーは常に設置する。実行するかどうかは発火時に
+  // 設定シートの dailyBackup を読んで決めるので、設定を切り替えるだけで
+  // 有効化でき、トリガーの再設置も Web アプリの再デプロイも要らない。
+  if (!existing['dailyBackupJob']) {
+    var hour = Number(getConfigValue_('dailyBackupHour', 3));
+    if (!isFinite(hour) || hour < 0 || hour > 23) hour = 3;
+    ScriptApp.newTrigger('dailyBackupJob').timeBased().atHour(hour).everyDays(1).create();
   }
 }
 
@@ -1222,6 +1239,390 @@ function ledgerMark_(qrCodes, status, source, ref) {
     ledger.sheet.getRange(ledger.sheet.getLastRow() + 1, 1, appended.length, FI_LEDGER_HEADERS_.length).setValues(appended);
   }
   return { updated: updated, added: appended.length };
+}
+
+// ========================================
+// 6.5 バックアップと復元
+// ========================================
+//
+// 棚卸は在庫を絶対値で上書きするため、取り違えると元に戻す手段が無い。
+// そこで「商品管理シートの行そのもの」を2枚のシートに台帳として貯める。
+//
+//   バックアップ台帳: 1世代1行（backupId / 日時 / きっかけ / 実行者 / 商品数 / 備考）
+//   バックアップ明細: 1世代 商品数ぶんの行（backupId + 商品管理の A〜K 列）
+//
+// シートを copyTo() で複製しない理由: copyTo は使用範囲ではなくグリッド全体
+// （既定 1000×26 = 26,000 セル）を複製するため、30世代で 78 万セル（ブック上限の 7.8%）
+// を占める。さらにタブが増えると findNewResponseSheet_ の予備ロジックが
+// バックアップシートを回答シートと誤認する危険がある。
+
+var FI_BACKUP_SHEETS_ = {
+  LEDGER: 'バックアップ台帳',
+  DETAIL: 'バックアップ明細'
+};
+
+var FI_BACKUP_LEDGER_HEADERS_ = ['backupId', '日時', 'きっかけ', '実行者', '商品数', '備考'];
+
+// 商品管理の A〜K 列を保存する。L（更新日時）は保存しない（復元時は「今」を刻む）
+var FI_PRODUCT_COLS_ = 11;
+var FI_PRODUCT_COL_LABELS_ = ['商品コード', '商品名', '入数', '単価（税込）', '発注先', '担当者', 'メールアドレス', '現在庫', '安心在庫', '発注状況', '発注数/納期'];
+var FI_BACKUP_DETAIL_HEADERS_ = ['backupId'].concat(FI_PRODUCT_COL_LABELS_);
+
+// 復元の範囲。cols は商品管理シートの列番号（1始まり）。A列（商品コード）は照合キーなので変えない
+var FI_RESTORE_SCOPES_ = {
+  stock: { label: '在庫のみ（現在庫・安心在庫）', cols: [8, 9] },
+  all: { label: 'すべて（商品名〜発注数/納期）', cols: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11] }
+};
+
+var FI_BACKUP_ID_PREFIX_ = 'BK_';
+var FI_RESTORE_ID_PREFIX_ = 'RS_';
+
+/**
+ * 設定シートの TRUE/FALSE を読む
+ */
+function getConfigFlag_(key, defaultValue) {
+  return String(getConfigValue_(key, defaultValue)).trim().toUpperCase() === 'TRUE';
+}
+
+function getProductsSheet_() {
+  var sheet = getSpreadsheet().getSheetByName(SHEET_NAMES.PRODUCTS);
+  if (!sheet) throw new Error('商品管理シートが見つかりません');
+  return sheet;
+}
+
+/**
+ * 商品管理の A〜K を読む（ヘッダー行を除き、商品コードのある行だけ）
+ */
+function readProductRows_() {
+  var sheet = getProductsSheet_();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { sheet: sheet, rows: [] };
+  var values = sheet.getRange(2, 1, lastRow - 1, FI_PRODUCT_COLS_).getValues();
+  var rows = [];
+  for (var i = 0; i < values.length; i++) {
+    if (String(values[i][0] === undefined || values[i][0] === null ? '' : values[i][0]).trim() === '') continue;
+    rows.push(values[i]);
+  }
+  return { sheet: sheet, rows: rows };
+}
+
+function ensureBackupSheets_() {
+  var ss = getSpreadsheet();
+  return {
+    ledger: ensureSheetWithHeaders_(ss, FI_BACKUP_SHEETS_.LEDGER, FI_BACKUP_LEDGER_HEADERS_, '#2e5d34'),
+    detail: ensureSheetWithHeaders_(ss, FI_BACKUP_SHEETS_.DETAIL, FI_BACKUP_DETAIL_HEADERS_, '#2e5d34')
+  };
+}
+
+/**
+ * BK_yyyyMMdd_HHmmss（同じ秒に2回走ったら _2, _3 …）。文字列順＝時系列順になる
+ */
+function nextBackupId_(ledger, prefix) {
+  var base = (prefix || FI_BACKUP_ID_PREFIX_) + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyyMMdd_HHmmss');
+  var existing = {};
+  var lastRow = ledger.getLastRow();
+  if (lastRow >= 2) {
+    ledger.getRange(2, 1, lastRow - 1, 1).getValues().forEach(function(r) {
+      var id = String(r[0] || '').trim();
+      if (id) existing[id] = true;
+    });
+  }
+  if (!existing[base]) return base;
+  for (var n = 2; n <= 99; n++) {
+    if (!existing[base + '_' + n]) return base + '_' + n;
+  }
+  throw new Error('backupId を採番できませんでした: ' + base);
+}
+
+/**
+ * 商品管理の現在の内容を1世代ぶん書き出す。
+ *
+ * ★この関数は ScriptLock を取らない。
+ *   棚卸フォームの処理（processResponseRow_）のロック内から呼ばれるため、
+ *   ここでロックを取ると 30 秒待って必ず例外になる（ScriptLock は再入できない）。
+ *   単独で呼ぶときは takeBackupLocked_ を使うこと。
+ *
+ * @param {string} reason きっかけ（「棚卸(フォーム)」「復元前」「手動」など）
+ * @param {string} actor 実行者
+ * @param {string} note 備考
+ * @param {{prune?:boolean}} opts prune:false で世代整理をしない（復元前の控えなど）
+ * @return {{backupId:string, count:number}}
+ */
+function takeBackup_(reason, actor, note, opts) {
+  opts = opts || {};
+  var sheets = ensureBackupSheets_();
+  var read = readProductRows_();
+  var id = nextBackupId_(sheets.ledger, FI_BACKUP_ID_PREFIX_);
+  if (read.rows.length) {
+    var out = read.rows.map(function(r) { return [id].concat(r); });
+    sheets.detail.getRange(sheets.detail.getLastRow() + 1, 1, out.length, FI_BACKUP_DETAIL_HEADERS_.length).setValues(out);
+  }
+  sheets.ledger.appendRow([id, nowJa_(), String(reason || ''), String(actor || ''), read.rows.length, String(note || '')]);
+  if (opts.prune !== false) pruneBackups_();
+  return { backupId: id, count: read.rows.length };
+}
+
+/**
+ * 単独で呼ぶとき用（Webアクション・毎日のジョブ）。ロック内からは呼ばないこと
+ */
+function takeBackupLocked_(reason, actor, note) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    return takeBackup_(reason, actor, note, {});
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * 保持世代数を超えた古いバックアップを消す。
+ * 台帳・明細とも「残す行だけ書き戻す」方式（行ごとの削除は行数が増えると遅いため）。
+ * 復元の記録（RS_）はバックアップ本体（BK_）とは別枠で数える。
+ */
+function pruneBackups_() {
+  var max = Number(getConfigValue_('maxBackups', 30));
+  if (!isFinite(max) || max < 1) max = 30;
+  var sheets = ensureBackupSheets_();
+  var lastRow = sheets.ledger.getLastRow();
+  if (lastRow < 2) return { removed: 0 };
+
+  var lcols = FI_BACKUP_LEDGER_HEADERS_.length;
+  var rows = sheets.ledger.getRange(2, 1, lastRow - 1, lcols).getValues()
+    .filter(function(r) { return String(r[0] || '').trim() !== ''; });
+
+  var drop = {};
+  [FI_BACKUP_ID_PREFIX_, FI_RESTORE_ID_PREFIX_].forEach(function(prefix) {
+    var group = rows.filter(function(r) { return String(r[0]).indexOf(prefix) === 0; });
+    if (group.length <= max) return;
+    group.slice(0, group.length - max).forEach(function(r) { drop[String(r[0])] = true; });
+  });
+  var dropIds = Object.keys(drop);
+  if (!dropIds.length) return { removed: 0 };
+
+  var keep = rows.filter(function(r) { return !drop[String(r[0])]; });
+  sheets.ledger.getRange(2, 1, lastRow - 1, lcols).clearContent();
+  if (keep.length) sheets.ledger.getRange(2, 1, keep.length, lcols).setValues(keep);
+
+  var dLast = sheets.detail.getLastRow();
+  if (dLast >= 2) {
+    var dcols = FI_BACKUP_DETAIL_HEADERS_.length;
+    var all = sheets.detail.getRange(2, 1, dLast - 1, dcols).getValues();
+    var keepDetail = all.filter(function(r) {
+      var id = String(r[0] || '').trim();
+      return id !== '' && !drop[id];
+    });
+    sheets.detail.getRange(2, 1, dLast - 1, dcols).clearContent();
+    if (keepDetail.length) sheets.detail.getRange(2, 1, keepDetail.length, dcols).setValues(keepDetail);
+  }
+  return { removed: dropIds.length };
+}
+
+/**
+ * バックアップ一覧（新しい順）。復元の記録（RS_）は含めない
+ */
+function listBackups_(limit) {
+  var sheets = ensureBackupSheets_();
+  var lastRow = sheets.ledger.getLastRow();
+  if (lastRow < 2) return [];
+  var values = sheets.ledger.getRange(2, 1, lastRow - 1, FI_BACKUP_LEDGER_HEADERS_.length).getValues();
+  var list = [];
+  values.forEach(function(r) {
+    var id = String(r[0] || '').trim();
+    if (id.indexOf(FI_BACKUP_ID_PREFIX_) !== 0) return;
+    list.push({
+      backupId: id,
+      at: cellText_(r[1]),
+      reason: String(r[2] || ''),
+      actor: String(r[3] || ''),
+      count: Number(r[4]) || 0,
+      note: String(r[5] || '')
+    });
+  });
+  list.reverse();
+  var n = Number(limit) || 0;
+  return n > 0 ? list.slice(0, n) : list;
+}
+
+function readBackupRows_(backupId) {
+  var id = String(backupId || '').trim();
+  if (!id) throw new Error('backupId を指定してください');
+  var sheets = ensureBackupSheets_();
+  var lastRow = sheets.detail.getLastRow();
+  var rows = [];
+  if (lastRow >= 2) {
+    var cols = FI_BACKUP_DETAIL_HEADERS_.length;
+    sheets.detail.getRange(2, 1, lastRow - 1, cols).getValues().forEach(function(r) {
+      if (String(r[0] || '').trim() === id) rows.push(r.slice(1));
+    });
+  }
+  if (!rows.length) {
+    throw new Error('バックアップが見つかりません: ' + id + '（保持世代数を超えて削除された可能性があります）');
+  }
+  return rows;
+}
+
+/**
+ * セルの値を比較用の文字列にする（数値の 100 と文字列の "100" を同じ値として扱う）
+ */
+function cellText_(v) {
+  if (v === undefined || v === null) return '';
+  if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss');
+  return String(v).trim();
+}
+
+function sameCellValue_(a, b) {
+  return cellText_(a) === cellText_(b);
+}
+
+function normalizeRestoreScope_(scope) {
+  return FI_RESTORE_SCOPES_[scope] ? scope : 'stock';
+}
+
+/**
+ * 復元したら何が変わるかを、書き込まずに調べる
+ * @return {{backupId, scope, scopeLabel, changes, changeCount, truncated, added, missing}}
+ *   changes: 値が変わる商品   added: バックアップに無いので据え置く商品
+ *   missing: バックアップにあるが今の商品管理に無い商品（復活させない）
+ */
+function previewRestore_(backupId, scope) {
+  var scopeKey = normalizeRestoreScope_(scope);
+  var sc = FI_RESTORE_SCOPES_[scopeKey];
+  var backupRows = readBackupRows_(backupId);
+  var byCode = {};
+  backupRows.forEach(function(r) { byCode[String(r[0] || '').trim()] = r; });
+
+  var read = readProductRows_();
+  var changes = [], added = [], missing = [], seen = {};
+  read.rows.forEach(function(cur) {
+    var code = String(cur[0] || '').trim();
+    var b = byCode[code];
+    if (!b) { added.push({ code: code, name: String(cur[1] || '') }); return; }
+    seen[code] = true;
+    var fields = [];
+    sc.cols.forEach(function(col) {
+      var idx = col - 1;
+      if (!sameCellValue_(cur[idx], b[idx])) {
+        fields.push({ label: FI_PRODUCT_COL_LABELS_[idx], from: cellText_(cur[idx]), to: cellText_(b[idx]) });
+      }
+    });
+    if (fields.length) changes.push({ code: code, name: String(cur[1] || ''), fields: fields });
+  });
+  Object.keys(byCode).forEach(function(code) {
+    if (!seen[code]) missing.push({ code: code, name: String(byCode[code][1] || '') });
+  });
+
+  var limit = 200;
+  return {
+    backupId: String(backupId),
+    scope: scopeKey,
+    scopeLabel: sc.label,
+    changes: changes.length > limit ? changes.slice(0, limit) : changes,
+    changeCount: changes.length,
+    truncated: changes.length > limit,
+    added: added,
+    missing: missing
+  };
+}
+
+/**
+ * バックアップから復元する。順序に意味がある。
+ *  1. ロックを取る
+ *  2. 先にバックアップ行を読む（この後の世代整理が復元元を消しても大丈夫なように）
+ *  3. 今の状態を「復元前」として控える（prune:false）→ 復元そのものを取り消せる
+ *  4. 商品管理を1回だけ読み、対象列だけ差し替えて1回で書き戻す
+ *  5. バックアップに無い商品は触らない（added）／バックアップにあって今無い商品は復活させない（missing）
+ *  6. 台帳に記録し管理者へ通知。履歴シートには書かない
+ *     （79商品の復元で履歴上限1000行の8%を消費してしまうため。監査記録は台帳が担う）
+ */
+function restoreBackup_(backupId, scope, actor) {
+  var scopeKey = normalizeRestoreScope_(scope);
+  var sc = FI_RESTORE_SCOPES_[scopeKey];
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var backupRows = readBackupRows_(backupId);
+    var byCode = {};
+    backupRows.forEach(function(r) { byCode[String(r[0] || '').trim()] = r; });
+
+    var pre = takeBackup_('復元前', actor || '', '復元元: ' + backupId, { prune: false });
+
+    var sheet = getProductsSheet_();
+    var lastRow = sheet.getLastRow();
+    var width = FI_PRODUCT_COLS_ + 1;   // L（更新日時）まで書き戻す
+    var grid = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, width).getValues() : [];
+    var stamp = nowJa_();
+    var restored = [], added = [], seen = {};
+
+    for (var i = 0; i < grid.length; i++) {
+      var row = grid[i];
+      var code = String(row[0] === undefined || row[0] === null ? '' : row[0]).trim();
+      if (!code) continue;
+      var b = byCode[code];
+      if (!b) { added.push({ code: code, name: String(row[1] || '') }); continue; }
+      seen[code] = true;
+      var changed = false;
+      for (var k = 0; k < sc.cols.length; k++) {
+        var idx = sc.cols[k] - 1;
+        if (!sameCellValue_(row[idx], b[idx])) { row[idx] = b[idx]; changed = true; }
+      }
+      if (changed) {
+        row[FI_PRODUCT_COLS_] = stamp;
+        restored.push({ code: code, name: String(row[1] || '') });
+      }
+    }
+    if (grid.length) sheet.getRange(2, 1, grid.length, width).setValues(grid);
+
+    var missing = [];
+    Object.keys(byCode).forEach(function(code) {
+      if (!seen[code]) missing.push({ code: code, name: String(byCode[code][1] || '') });
+    });
+
+    var sheets = ensureBackupSheets_();
+    sheets.ledger.appendRow([
+      nextBackupId_(sheets.ledger, FI_RESTORE_ID_PREFIX_),
+      nowJa_(), '復元', String(actor || ''), restored.length,
+      '復元元: ' + backupId + ' / 範囲: ' + sc.label + ' / 取り消し用: ' + pre.backupId +
+      (added.length ? ' / 据え置き ' + added.length + '件' : '') +
+      (missing.length ? ' / 復活させず ' + missing.length + '件' : '')
+    ]);
+
+    sendAdminMail_('【お守り在庫】バックアップから復元しました（' + backupId + '）',
+      '商品管理シートを ' + backupId + ' の内容で復元しました。\n' +
+      '範囲: ' + sc.label + '\n' +
+      '値が変わった商品: ' + restored.length + '件\n' +
+      'バックアップに無いため据え置いた商品: ' + added.length + '件\n' +
+      'バックアップにあるが現在の商品管理に無い商品（復活させていません）: ' + missing.length + '件\n\n' +
+      'この復元を取り消すには、バックアップ ' + pre.backupId + '（きっかけ「復元前」）を同じ範囲で復元してください。');
+
+    return {
+      success: true,
+      backupId: String(backupId),
+      scope: scopeKey,
+      scopeLabel: sc.label,
+      restored: restored,
+      restoredCount: restored.length,
+      added: added,
+      missing: missing,
+      undoBackupId: pre.backupId
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * 毎日のバックアップ。トリガーは常に設置してあり、実行するかどうかは
+ * 発火時に設定シートを読んで決める（設定を切り替えるだけで有効化できる）。
+ */
+function dailyBackupJob() {
+  if (!getConfigFlag_('dailyBackup', 'FALSE')) {
+    Logger.log('dailyBackupJob: 設定 dailyBackup が FALSE のため何もしません');
+    return { success: true, skipped: true };
+  }
+  var r = takeBackupLocked_('毎日', 'システム', '自動バックアップ');
+  Logger.log('dailyBackupJob: ' + JSON.stringify(r));
+  return { success: true, backupId: r.backupId, count: r.count };
 }
 
 // ========================================
