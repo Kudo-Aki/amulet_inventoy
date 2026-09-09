@@ -24,12 +24,14 @@ var FI_SHEETS_ = {
   STAFF: '入力者',
   LEDGER: '箱台帳',
   IN_RESP: 'フォーム回答_入荷',
-  OUT_RESP: 'フォーム回答_出荷'
+  OUT_RESP: 'フォーム回答_出荷',
+  INV_RESP: 'フォーム回答_棚卸'
 };
 
 var FI_FORM_TITLES_ = {
   IN: 'お守り入荷登録',
-  OUT: 'お守り出荷登録'
+  OUT: 'お守り出荷登録',
+  INV: 'お守り棚卸登録'
 };
 
 // フォームの質問タイトル（回答シートのヘッダー名にもなる。変更する場合はフォームも作り直す）
@@ -37,6 +39,8 @@ var FI_Q_ = {
   STAFF: '入力者',
   IN_DATE: '入荷日',
   OUT_DATE: '出荷日',
+  INV_DATE: '棚卸日',
+  ACTUAL: '実在庫数',  // 実在庫数1, 実在庫数2, ...（棚卸）
   PRODUCT: '商品',    // 商品1, 商品2, ...
   BOXES: '箱数',      // 箱数1, 箱数2, ...
   PIECES: '端数',     // 端数1, ...（出荷のみ。箱に満たない個数）
@@ -46,9 +50,10 @@ var FI_Q_ = {
 
 var FI_IN_SLOTS_ = 10;   // 入荷フォームの商品枠数
 var FI_OUT_SLOTS_ = 3;   // 出荷フォームの商品枠数
+var FI_INV_SLOTS_ = 10;  // 棚卸フォームの商品枠数
 
 // 回答シートに GAS が追記する列
-var FI_RESULT_COLS_ = ['処理結果', '処理日時', '在庫反映内容', 'ラベル番号範囲', 'PDF URL', 'エラー'];
+var FI_RESULT_COLS_ = ['処理結果', '処理日時', '在庫反映内容', 'ラベル番号範囲', 'PDF URL', 'バックアップ', 'エラー'];
 
 var FI_STATUS_ = {
   PROCESSING: '処理中',
@@ -76,6 +81,11 @@ var FI_CONFIG_DEFAULTS_ = [
   ['outFormEditUrl', '', '出荷フォーム 編集用URL（自動設定）'],
   ['inResponseSheet', 'フォーム回答_入荷', '入荷の回答シート名'],
   ['outResponseSheet', 'フォーム回答_出荷', '出荷の回答シート名'],
+  ['invFormId', '', '棚卸フォームID（自動設定）'],
+  ['invFormUrl', '', '棚卸フォーム 回答用URL（自動設定）'],
+  ['invFormEditUrl', '', '棚卸フォーム 編集用URL（自動設定）'],
+  ['invResponseSheet', 'フォーム回答_棚卸', '棚卸の回答シート名'],
+  ['maxInventoryCount', 100000, '棚卸で1商品に入力できる実在庫数の上限（桁の入力ミス対策）'],
   ['offsetX_mm', 0, 'ラベル印字位置の微調整 横（mm、右が＋）'],
   ['offsetY_mm', 0, 'ラベル印字位置の微調整 縦（mm、下が＋）'],
   ['maxBoxesPerLine', 50, '1商品あたりの箱数上限（フォーム）'],
@@ -213,7 +223,7 @@ function nowJa_() {
 // 種別を増やすときは、この表に1件足して handle（ロック内の反映）と
 // postLock（ロック外のPDF・メール）を書けばよい。
 
-var FI_KIND_ORDER_ = ['in', 'out'];
+var FI_KIND_ORDER_ = ['in', 'out', 'inv'];
 
 var FI_ROLE_ = { STAFF: 'staff', PRODUCT: 'product' };
 
@@ -298,6 +308,29 @@ function buildFormSpecs_() {
     ],
     handle: handleStockLines_,
     postLock: postLockShipping_
+  };
+
+  specs['inv'] = {
+    kind: 'inv',
+    label: '棚卸',
+    formTitle: FI_FORM_TITLES_.INV,
+    description: '数えた実際の在庫数を登録します。送信すると、入力した商品だけ在庫がその数に置き換わります（入力していない商品はそのままです）。反映の前に自動でバックアップを取ります。',
+    confirmation: '登録しました。入力した商品の在庫を、数えた数に置き換えます。',
+    formIdKey: 'invFormId', formUrlKey: 'invFormUrl', formEditUrlKey: 'invFormEditUrl',
+    sheetKey: 'invResponseSheet', sheetDefault: FI_SHEETS_.INV_RESP,
+    slots: FI_INV_SLOTS_,
+    dateTitle: FI_Q_.INV_DATE,
+    head: [
+      fiListQuestion_(FI_Q_.STAFF, true, 'ご自身の名前を選んでください（入力者シートに登録された人）', [FI_STAFF_PLACEHOLDER_], FI_ROLE_.STAFF),
+      fiDateQuestion_(FI_Q_.INV_DATE, false, '空欄の場合は送信日になります')
+    ],
+    slotQuestions: [
+      fiListQuestion_(FI_Q_.PRODUCT, true, '', [FI_PRODUCT_PLACEHOLDER_], FI_ROLE_.PRODUCT),
+      fiTextQuestion_(FI_Q_.ACTUAL, true, '数えた実際の個数（箱数ではなく個数）。0 と空欄は意味が違います: 0 は「在庫ゼロ」、空欄は「数えていない」です', FI_WHOLE_NUMBER_)
+    ],
+    tail: [fiParagraphQuestion_(FI_Q_.NOTE, false)],
+    handle: handleInventory_,
+    postLock: null
   };
 
   return specs;
@@ -819,7 +852,8 @@ function processResponseRow_(sheet, row, opts) {
       '処理結果': FI_STATUS_.STOCK_DONE,
       '処理日時': nowJa_(),
       '在庫反映内容': summaryText,
-      'ラベル番号範囲': ''
+      'ラベル番号範囲': '',
+      'バックアップ': ''
     };
     Object.keys(handled.cells || {}).forEach(function(k) { cells[k] = handled.cells[k]; });
     writeResultCells_(sheet, row, cells);
@@ -970,6 +1004,120 @@ function writeResultCells_(sheet, row, obj) {
 }
 
 /**
+ * その欄に回答があったか。
+ *
+ * ★数値の 0 は「回答あり」。String(0) === '0' なので空文字と区別できる。
+ *   ここを if (!v) や if (v) に書き換えると、棚卸で「実在庫 0 個」が
+ *   「数えていない（未計上）」に化けて、在庫が実態と合わなくなる。
+ */
+function hasAnswer_(v) {
+  if (v === undefined || v === null) return false;
+  return String(v).trim() !== '';
+}
+
+/**
+ * 棚卸フォームの 商品n / 実在庫数n を検証して配列にする。
+ *
+ * 空欄と 0 の扱い:
+ *   商品も実在庫数も空 → 未計上（在庫を触らない）
+ *   実在庫数が 0      → 在庫ゼロとして反映する
+ *   どちらか片方だけ  → 入れ忘れとしてエラー（黙って捨てない）
+ *
+ * 入数は検証しない。棚卸は箱数ではなく絶対個数の申告なので、
+ * 入数が 0 のまま登録されている既存商品でも数えられる必要がある。
+ *
+ * @return {Array<{slot:number, code:string, name:string, before:number, actual:number, diff:number}>}
+ */
+function parseInventoryLines_(map, products) {
+  var spec = getFormSpec_('inv');
+  var slots = spec ? spec.slots : FI_INV_SLOTS_;
+  var maxCount = Number(getConfigValue_('maxInventoryCount', 100000));
+  if (!isFinite(maxCount) || maxCount < 1) maxCount = 100000;
+  var lines = [];
+  var seen = {};
+
+  for (var i = 1; i <= slots; i++) {
+    var choice = map[FI_Q_.PRODUCT + i];
+    var actualRaw = map[FI_Q_.ACTUAL + i];
+    var hasChoice = hasAnswer_(choice);
+    var hasActual = hasAnswer_(actualRaw);
+    if (!hasChoice && !hasActual) continue;   // 数えていない枠
+    if (!hasChoice) throw new Error('商品' + i + ' が選択されていません（実在庫数' + i + ' だけ入力されています）');
+    if (!hasActual) throw new Error('実在庫数' + i + ' が入力されていません（数えていないなら商品' + i + ' も空にしてください。0 は「在庫ゼロ」の意味になります）');
+
+    var code = extractProductCode_(choice);
+    var p = products[code];
+    // 未知のコードをここで止める。updateSingleProduct は未知コードを追記するため、
+    // 通してしまうと商品管理シートに中身の無い行ができる。
+    if (!p) throw new Error('商品' + i + ' のコードが商品マスタにありません: ' + choice + '（商品登録フォームで先に登録してください）');
+    if (seen[code]) throw new Error('同じ商品が複数の枠に入力されています: ' + code + '（1つの枠にまとめてください）');
+    seen[code] = true;
+
+    var actual = Number(String(actualRaw).trim());
+    if (!isFinite(actual) || actual < 0 || Math.floor(actual) !== actual) {
+      throw new Error('実在庫数' + i + ' は 0 以上の整数で入力してください: ' + actualRaw);
+    }
+    if (actual > maxCount) {
+      throw new Error('実在庫数' + i + ' が上限（' + maxCount + '個）を超えています: ' + actual + '（桁の入力ミスではありませんか）');
+    }
+
+    var before = Number(p.stock) || 0;
+    lines.push({ slot: i, code: code, name: p.name, before: before, actual: actual, diff: actual - before });
+  }
+
+  if (!lines.length) throw new Error('商品が1つも入力されていません');
+  return lines;
+}
+
+/**
+ * 棚卸の反映（ロック内）。
+ *
+ * ★処理順は「解析 → バックアップ → 書き込み」。
+ *   先にバックアップを取ると、入力ミスで解析に失敗しただけの回答でも
+ *   バックアップ世代を1つ消費し、本当に必要な世代を押し出してしまう。
+ */
+function handleInventory_(c) {
+  var products = c.products;
+  var lines = parseInventoryLines_(c.map, products);
+
+  var backupId = '';
+  if (getConfigFlag_('backupBeforeFormInventory', 'TRUE')) {
+    // ここは既に processResponseRow_ のロックの中。ロックを取らない takeBackup_ を使う
+    backupId = takeBackup_('棚卸(フォーム)', c.staffName, c.ref, {}).backupId;
+  }
+
+  var note = String(c.map[FI_Q_.NOTE] || '').trim();
+  var summaryLines = [];
+  var changed = 0;
+
+  lines.forEach(function(line) {
+    updateSingleProduct(line.code, { stock: line.actual });
+    if (line.diff !== 0) {
+      changed++;
+      addHistoryRecord({
+        date: nowJa_(),
+        type: line.diff > 0 ? 'in' : 'out',
+        productCode: line.code,
+        productName: line.name,
+        quantity: Math.abs(line.diff),
+        note: '棚卸(フォーム): ' + line.before + '→' + line.actual + ' (' + (line.diff > 0 ? '+' : '') + line.diff + ') 入力者:' + c.staffName + (note ? ' ' + note : '')
+      });
+    }
+    summaryLines.push(line.name + '（' + line.code + '）: ' + line.before + ' → ' + line.actual + '個' +
+      (line.diff === 0 ? '（差異なし）' : '（' + (line.diff > 0 ? '+' : '') + line.diff + '）'));
+  });
+
+  var untouched = Object.keys(products).length - lines.length;
+  summaryLines.push('計上 ' + lines.length + '件 / 差異あり ' + changed + '件 / 未計上 ' + untouched + '件');
+
+  return {
+    summary: summaryLines.join('\n'),
+    cells: { 'バックアップ': backupId },
+    post: { backupId: backupId, changed: changed }
+  };
+}
+
+/**
  * 回答行の 商品n / 箱数n / 端数n を検証して配列にする
  * @return {Array<{slot:number, code:string, boxes:number, pieces:number, quantity:number}>}
  */
@@ -986,9 +1134,9 @@ function parseLines_(kind, map, products) {
     var choice = map[FI_Q_.PRODUCT + i];
     var boxesRaw = map[FI_Q_.BOXES + i];
     var piecesRaw = map[FI_Q_.PIECES + i];
-    var hasChoice = choice !== undefined && choice !== null && String(choice).trim() !== '';
-    var hasBoxes = boxesRaw !== undefined && boxesRaw !== null && String(boxesRaw).trim() !== '';
-    var hasPieces = piecesRaw !== undefined && piecesRaw !== null && String(piecesRaw).trim() !== '';
+    var hasChoice = hasAnswer_(choice);
+    var hasBoxes = hasAnswer_(boxesRaw);
+    var hasPieces = hasAnswer_(piecesRaw);
     if (!hasChoice && !hasBoxes && !hasPieces) continue;
     if (!hasChoice) throw new Error('商品' + i + ' が選択されていません');
 
