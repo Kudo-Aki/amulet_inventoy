@@ -938,7 +938,9 @@
             const wrap = document.getElementById('fi-form-cards');
             if (!wrap) return;
             wrap.innerHTML = forms.map(f => {
-                const kind = escapeHtml(f.kind);
+                // kind は id と onclick の文字列リテラルに埋め込むので、英数字だけに絞る
+                const kind = String(f.kind || '').replace(/[^A-Za-z0-9_-]/g, '');
+                if (!kind) return '';
                 const icon = FI_FORM_ICONS[f.kind] || '📄';
                 return `<div class="fi-form-card">
                         <h3>${icon} ${escapeHtml(f.label || f.kind)}フォーム</h3>
@@ -951,7 +953,10 @@
                         <div id="fi-${kind}-qr" class="fi-qr hidden"></div>
                     </div>`;
             }).join('');
-            forms.forEach(f => setFormLink(f.kind, f.url, f.editUrl));
+            forms.forEach(f => {
+                const kind = String(f.kind || '').replace(/[^A-Za-z0-9_-]/g, '');
+                if (kind) setFormLink(kind, f.url, f.editUrl);
+            });
         }
 
         function setFormLink(kind, url, editUrl) {
