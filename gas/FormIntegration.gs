@@ -197,6 +197,187 @@ function nowJa_() {
 }
 
 // ========================================
+// 1.5 フォーム種別の仕様表
+// ========================================
+//
+// 入荷・出荷・棚卸・商品登録は「フォームを作る → 回答シートを読む → 商品管理へ反映する」
+// という同じ流れを共有している。種別ごとの違いはすべてこの表に集約してあり、
+// createIntakeForm_ / getResponseSheet_ / syncFormChoices / processPendingResponses /
+// processResponseRow_ は表を引くだけになっている。
+// 種別を増やすときは、この表に1件足して handle（ロック内の反映）と
+// postLock（ロック外のPDF・メール）を書けばよい。
+
+var FI_KIND_ORDER_ = ['in', 'out'];
+
+var FI_ROLE_ = { STAFF: 'staff', PRODUCT: 'product' };
+
+var FI_WHOLE_NUMBER_ = { kind: 'wholeNumber', help: '整数を入力してください' };
+var FI_STAFF_PLACEHOLDER_ = '（入力者シートを設定後に syncFormChoices を実行）';
+var FI_PRODUCT_PLACEHOLDER_ = '（商品マスタを設定後に syncFormChoices を実行）';
+
+function fiListQuestion_(title, required, help, choices, role) {
+  return { type: 'list', title: title, required: !!required, help: help || '', choices: choices || [], role: role || null };
+}
+function fiTextQuestion_(title, required, help, validation) {
+  return { type: 'text', title: title, required: !!required, help: help || '', validation: validation || null };
+}
+function fiDateQuestion_(title, required, help) {
+  return { type: 'date', title: title, required: !!required, help: help || '' };
+}
+function fiParagraphQuestion_(title, required, help) {
+  return { type: 'paragraph', title: title, required: !!required, help: help || '' };
+}
+
+var FI_FORM_SPECS_CACHE_ = null;
+
+function buildFormSpecs_() {
+  var specs = {};
+
+  specs['in'] = {
+    kind: 'in',
+    label: '入荷',
+    formTitle: FI_FORM_TITLES_.IN,
+    description: '届いた箱の数を登録します。送信すると在庫に反映され、箱に貼るラベル（QR付き）のPDFが入力者宛にメールで届きます。',
+    confirmation: '登録しました。在庫に反映し、ラベルPDFを入力者宛にメールします（届くまで1〜2分かかることがあります）。',
+    formIdKey: 'inFormId', formUrlKey: 'inFormUrl', formEditUrlKey: 'inFormEditUrl',
+    sheetKey: 'inResponseSheet', sheetDefault: FI_SHEETS_.IN_RESP,
+    slots: FI_IN_SLOTS_,
+    dateTitle: FI_Q_.IN_DATE,
+    sign: 1,              // 在庫を増やす
+    hasPieces: false,     // 端数欄なし
+    hasDest: false,       // 出荷先欄なし
+    reserveBoxes: true,   // 箱台帳に採番して登録する
+    checkLowStock: false,
+    head: [
+      fiListQuestion_(FI_Q_.STAFF, true, 'ご自身の名前を選んでください（入力者シートに登録された人）', [FI_STAFF_PLACEHOLDER_], FI_ROLE_.STAFF),
+      fiDateQuestion_(FI_Q_.IN_DATE, false, '空欄の場合は送信日になります（QRの年はこの日付の西暦下2桁）')
+    ],
+    // スロットの質問は「枠1だけ必須」。required は枠1にのみ適用される（formQuestionPlan_ 参照）
+    slotQuestions: [
+      fiListQuestion_(FI_Q_.PRODUCT, true, '', [FI_PRODUCT_PLACEHOLDER_], FI_ROLE_.PRODUCT),
+      fiTextQuestion_(FI_Q_.BOXES, true, '届いた箱の数（1以上の整数）', FI_WHOLE_NUMBER_)
+    ],
+    tail: [fiParagraphQuestion_(FI_Q_.NOTE, false)],
+    handle: handleStockLines_,
+    postLock: postLockIntake_
+  };
+
+  specs['out'] = {
+    kind: 'out',
+    label: '出荷',
+    formTitle: FI_FORM_TITLES_.OUT,
+    description: '倉庫から持ち出した数を登録します。送信すると在庫から減算されます。',
+    confirmation: '登録しました。在庫に反映します。',
+    formIdKey: 'outFormId', formUrlKey: 'outFormUrl', formEditUrlKey: 'outFormEditUrl',
+    sheetKey: 'outResponseSheet', sheetDefault: FI_SHEETS_.OUT_RESP,
+    slots: FI_OUT_SLOTS_,
+    dateTitle: FI_Q_.OUT_DATE,
+    sign: -1,             // 在庫を減らす（0未満にはしない）
+    hasPieces: true,
+    hasDest: true,
+    reserveBoxes: false,
+    checkLowStock: true,
+    head: [
+      fiListQuestion_(FI_Q_.STAFF, true, 'ご自身の名前を選んでください（入力者シートに登録された人）', [FI_STAFF_PLACEHOLDER_], FI_ROLE_.STAFF),
+      fiDateQuestion_(FI_Q_.OUT_DATE, false, '空欄の場合は送信日になります')
+    ],
+    slotQuestions: [
+      fiListQuestion_(FI_Q_.PRODUCT, true, '', [FI_PRODUCT_PLACEHOLDER_], FI_ROLE_.PRODUCT),
+      fiTextQuestion_(FI_Q_.BOXES, true, '持ち出した箱の数（整数。箱単位でなければ 0 にして端数に個数を入力）', FI_WHOLE_NUMBER_),
+      fiTextQuestion_(FI_Q_.PIECES, false, '箱に満たない個数（任意）', FI_WHOLE_NUMBER_)
+    ],
+    tail: [
+      fiTextQuestion_(FI_Q_.DEST, false, '授与所名など（任意）', null),
+      fiParagraphQuestion_(FI_Q_.NOTE, false)
+    ],
+    handle: handleStockLines_,
+    postLock: postLockShipping_
+  };
+
+  return specs;
+}
+
+function getFormSpecs_() {
+  if (!FI_FORM_SPECS_CACHE_) FI_FORM_SPECS_CACHE_ = buildFormSpecs_();
+  return FI_FORM_SPECS_CACHE_;
+}
+
+function getFormSpec_(kind) {
+  return getFormSpecs_()[kind] || null;
+}
+
+/**
+ * 回答シート名（設定シートで変更できる）
+ */
+function responseSheetName_(spec) {
+  return getConfigValue_(spec.sheetKey, spec.sheetDefault);
+}
+
+/**
+ * 回答シート名から種別を引く
+ */
+function kindForResponseSheet_(sheetName) {
+  var found = null;
+  FI_KIND_ORDER_.forEach(function(kind) {
+    if (found) return;
+    var spec = getFormSpec_(kind);
+    if (spec && sheetName === responseSheetName_(spec)) found = kind;
+  });
+  return found;
+}
+
+/**
+ * 仕様表から、フォームに並べる質問を順番どおりに展開する
+ * @return {Array<{q:Object, title:string, required:boolean, slot:number|undefined}>}
+ */
+function formQuestionPlan_(spec) {
+  var plan = [];
+  (spec.head || []).forEach(function(q) {
+    plan.push({ q: q, title: q.title, required: !!q.required });
+  });
+  for (var i = 1; i <= (spec.slots || 0); i++) {
+    (spec.slotQuestions || []).forEach(function(q) {
+      // 枠1だけ必須にする（枠2以降を必須にすると1商品だけの送信ができなくなる）
+      plan.push({ q: q, title: q.title + i, required: !!q.required && i === 1, slot: i });
+    });
+  }
+  (spec.tail || []).forEach(function(q) {
+    plan.push({ q: q, title: q.title, required: !!q.required });
+  });
+  return plan;
+}
+
+function buildTextValidation_(v) {
+  var b = FormApp.createTextValidation().setHelpText(v.help || '');
+  if (v.kind === 'wholeNumber') b = b.requireWholeNumber();
+  else if (v.kind === 'pattern') b = b.requireTextMatchesPattern(v.pattern);
+  else throw new Error('未知の入力検証: ' + v.kind);
+  return b.build();
+}
+
+function addFormQuestion_(form, q, title, required) {
+  var item;
+  if (q.type === 'list') {
+    item = form.addListItem().setTitle(title).setRequired(!!required);
+    if (q.help) item.setHelpText(q.help);
+    item.setChoiceValues(q.choices && q.choices.length ? q.choices : ['（未設定）']);
+  } else if (q.type === 'text') {
+    item = form.addTextItem().setTitle(title).setRequired(!!required);
+    if (q.help) item.setHelpText(q.help);
+    if (q.validation) item.setValidation(buildTextValidation_(q.validation));
+  } else if (q.type === 'date') {
+    item = form.addDateItem().setTitle(title).setRequired(!!required);
+    if (q.help) item.setHelpText(q.help);
+  } else if (q.type === 'paragraph') {
+    item = form.addParagraphTextItem().setTitle(title).setRequired(!!required);
+    if (q.help) item.setHelpText(q.help);
+  } else {
+    throw new Error('未知の質問タイプ: ' + q.type);
+  }
+  return item;
+}
+
+// ========================================
 // 2. セットアップ
 // ========================================
 
@@ -235,8 +416,9 @@ function setupFormIntegration() {
   }
 
   var forms = ensureForms_(ss, folder);
-  log.push('入荷フォーム: ' + forms.inForm.getPublishedUrl());
-  log.push('出荷フォーム: ' + forms.outForm.getPublishedUrl());
+  FI_KIND_ORDER_.forEach(function(kind) {
+    log.push(getFormSpec_(kind).label + 'フォーム: ' + forms[kind].getPublishedUrl());
+  });
 
   ensureTriggers_(ss);
   log.push('トリガー: OK（onFormSubmit / syncFormChoices 毎日6時 / processPendingResponses 10分毎）');
@@ -279,18 +461,16 @@ function ensureSheetWithHeaders_(ss, name, headers, color) {
  * 入荷・出荷フォームを作成（未作成のときだけ）し、スプレッドシートに紐づける
  */
 function ensureForms_(ss, folder) {
-  var inForm = openFormIfExists_(getConfigValue_('inFormId', ''));
-  if (!inForm) {
-    inForm = createIntakeForm_(ss, folder, 'in');
-  }
-  var outForm = openFormIfExists_(getConfigValue_('outFormId', ''));
-  if (!outForm) {
-    outForm = createIntakeForm_(ss, folder, 'out');
-  }
-  // 回答シートの追記列を確認
-  ensureResponseSheetColumns_(getResponseSheet_('in'));
-  ensureResponseSheetColumns_(getResponseSheet_('out'));
-  return { inForm: inForm, outForm: outForm };
+  var forms = {};
+  FI_KIND_ORDER_.forEach(function(kind) {
+    var spec = getFormSpec_(kind);
+    var form = openFormIfExists_(getConfigValue_(spec.formIdKey, ''));
+    if (!form) form = createIntakeForm_(ss, folder, kind);
+    forms[kind] = form;
+    // 回答シートの追記列を確認
+    ensureResponseSheetColumns_(getResponseSheet_(kind));
+  });
+  return forms;
 }
 
 function openFormIfExists_(formId) {
@@ -303,53 +483,27 @@ function openFormIfExists_(formId) {
 }
 
 function createIntakeForm_(ss, folder, kind) {
-  var isIn = kind === 'in';
-  var form = FormApp.create(isIn ? FI_FORM_TITLES_.IN : FI_FORM_TITLES_.OUT);
-  form.setDescription(isIn
-    ? '届いた箱の数を登録します。送信すると在庫に反映され、箱に貼るラベル（QR付き）のPDFが入力者宛にメールで届きます。'
-    : '倉庫から持ち出した数を登録します。送信すると在庫から減算されます。');
+  var spec = getFormSpec_(kind);
+  if (!spec) throw new Error('未知のフォーム種別: ' + kind);
+
+  var form = FormApp.create(spec.formTitle);
+  form.setDescription(spec.description);
   form.setCollectEmail(false);
   form.setLimitOneResponsePerUser(false);
   form.setAllowResponseEdits(false);
   form.setShowLinkToRespondAgain(true);
-  form.setConfirmationMessage(isIn
-    ? '登録しました。在庫に反映し、ラベルPDFを入力者宛にメールします（届くまで1〜2分かかることがあります）。'
-    : '登録しました。在庫に反映します。');
+  form.setConfirmationMessage(spec.confirmation);
 
-  // 入力者
-  form.addListItem().setTitle(FI_Q_.STAFF).setRequired(true)
-    .setHelpText('ご自身の名前を選んでください（入力者シートに登録された人）')
-    .setChoiceValues(['（入力者シートを設定後に syncFormChoices を実行）']);
-
-  // 日付
-  form.addDateItem().setTitle(isIn ? FI_Q_.IN_DATE : FI_Q_.OUT_DATE).setRequired(false)
-    .setHelpText('空欄の場合は送信日になります' + (isIn ? '（QRの年はこの日付の西暦下2桁）' : ''));
-
-  var slots = isIn ? FI_IN_SLOTS_ : FI_OUT_SLOTS_;
-  for (var i = 1; i <= slots; i++) {
-    form.addListItem().setTitle(FI_Q_.PRODUCT + i).setRequired(i === 1)
-      .setChoiceValues(['（商品マスタを設定後に syncFormChoices を実行）']);
-    var boxes = form.addTextItem().setTitle(FI_Q_.BOXES + i).setRequired(i === 1)
-      .setHelpText(isIn ? '届いた箱の数（1以上の整数）' : '持ち出した箱の数（整数。箱単位でなければ 0 にして端数に個数を入力）');
-    boxes.setValidation(FormApp.createTextValidation().setHelpText('整数を入力してください').requireWholeNumber().build());
-    if (!isIn) {
-      var pieces = form.addTextItem().setTitle(FI_Q_.PIECES + i).setRequired(false)
-        .setHelpText('箱に満たない個数（任意）');
-      pieces.setValidation(FormApp.createTextValidation().setHelpText('整数を入力してください').requireWholeNumber().build());
-    }
-  }
-
-  if (!isIn) {
-    form.addTextItem().setTitle(FI_Q_.DEST).setRequired(false).setHelpText('授与所名など（任意）');
-  }
-  form.addParagraphTextItem().setTitle(FI_Q_.NOTE).setRequired(false);
+  formQuestionPlan_(spec).forEach(function(entry) {
+    addFormQuestion_(form, entry.q, entry.title, entry.required);
+  });
 
   // 回答先をスプレッドシートに設定 → 新しくできた回答シートを見つけてリネーム
   var beforeNames = ss.getSheets().map(function(s) { return s.getName(); });
   form.setDestination(FormApp.DestinationType.SPREADSHEET, ss.getId());
   SpreadsheetApp.flush();
   var respSheet = findNewResponseSheet_(ss.getId(), form.getId(), beforeNames);
-  var targetName = isIn ? getConfigValue_('inResponseSheet', FI_SHEETS_.IN_RESP) : getConfigValue_('outResponseSheet', FI_SHEETS_.OUT_RESP);
+  var targetName = responseSheetName_(spec);
   if (respSheet) {
     var ssFresh = SpreadsheetApp.openById(ss.getId());
     if (ssFresh.getSheetByName(targetName) && respSheet.getName() !== targetName) {
@@ -369,9 +523,9 @@ function createIntakeForm_(ss, folder, kind) {
     // 移動できなくても動作に支障なし
   }
 
-  setConfigValue_(isIn ? 'inFormId' : 'outFormId', form.getId());
-  setConfigValue_(isIn ? 'inFormUrl' : 'outFormUrl', form.getPublishedUrl());
-  setConfigValue_(isIn ? 'inFormEditUrl' : 'outFormEditUrl', form.getEditUrl());
+  setConfigValue_(spec.formIdKey, form.getId());
+  setConfigValue_(spec.formUrlKey, form.getPublishedUrl());
+  setConfigValue_(spec.formEditUrlKey, form.getEditUrl());
   return form;
 }
 
@@ -393,9 +547,9 @@ function findNewResponseSheet_(spreadsheetId, formId, beforeNames) {
 }
 
 function getResponseSheet_(kind) {
-  var ss = getSpreadsheet();
-  var name = kind === 'in' ? getConfigValue_('inResponseSheet', FI_SHEETS_.IN_RESP) : getConfigValue_('outResponseSheet', FI_SHEETS_.OUT_RESP);
-  return ss.getSheetByName(name);
+  var spec = getFormSpec_(kind);
+  if (!spec) return null;
+  return getSpreadsheet().getSheetByName(responseSheetName_(spec));
 }
 
 /**
@@ -451,16 +605,25 @@ function syncFormChoices() {
   if (!staffChoices.length) staffChoices = ['（入力者シートに名前を登録してください）'];
 
   var updated = 0;
-  ['inFormId', 'outFormId'].forEach(function(key) {
-    var form = openFormIfExists_(getConfigValue_(key, ''));
+  FI_KIND_ORDER_.forEach(function(kind) {
+    var spec = getFormSpec_(kind);
+    var form = openFormIfExists_(getConfigValue_(spec.formIdKey, ''));
     if (!form) return;
+    // タイトル → 役割 の対応表を仕様から作る。
+    // 「商品」の前方一致で判定すると、商品登録フォームの「商品名」「商品コード」まで
+    // 商品スロットと誤認して選択肢で上書きしてしまう。
+    var roles = {};
+    formQuestionPlan_(spec).forEach(function(entry) {
+      if (entry.q.role) roles[entry.title] = entry.q.role;
+    });
     form.getItems(FormApp.ItemType.LIST).forEach(function(item) {
-      var title = item.getTitle();
+      var role = roles[item.getTitle()];
+      if (!role) return;
       var list = item.asListItem();
-      if (title === FI_Q_.STAFF) {
+      if (role === FI_ROLE_.STAFF) {
         list.setChoiceValues(staffChoices);
         updated++;
-      } else if (title.indexOf(FI_Q_.PRODUCT) === 0) {
+      } else if (role === FI_ROLE_.PRODUCT) {
         list.setChoiceValues(productChoices);
         updated++;
       }
@@ -541,8 +704,11 @@ function onFormSubmit(e) {
  * 未処理（処理結果が空）の回答行をすべて処理する（トリガーの取りこぼし対策・手動再処理）
  */
 function processPendingResponses() {
-  var results = { in: 0, out: 0, errors: 0 };
-  ['in', 'out'].forEach(function(kind) {
+  var results = {};
+  FI_KIND_ORDER_.forEach(function(kind) { results[kind] = 0; });
+  results.errors = 0;
+
+  FI_KIND_ORDER_.forEach(function(kind) {
     var sheet = getResponseSheet_(kind);
     if (!sheet) return;
     ensureResponseSheetColumns_(sheet);
@@ -581,10 +747,9 @@ function processPendingResponses() {
 function processResponseRow_(sheet, row, opts) {
   opts = opts || {};
   var sheetName = sheet.getName();
-  var kind = null;
-  if (sheetName === getConfigValue_('inResponseSheet', FI_SHEETS_.IN_RESP)) kind = 'in';
-  else if (sheetName === getConfigValue_('outResponseSheet', FI_SHEETS_.OUT_RESP)) kind = 'out';
+  var kind = kindForResponseSheet_(sheetName);
   if (!kind) return { status: 'skipped', message: '対象外のシート: ' + sheetName };
+  var spec = getFormSpec_(kind);
 
   ensureResponseSheetColumns_(sheet);
   var ref = sheetName + '!R' + row;
@@ -597,7 +762,7 @@ function processResponseRow_(sheet, row, opts) {
     return { status: 'locked' };
   }
 
-  var rowData, lines, staff, summaryText, labelItems = [], lowStock = [];
+  var rowData, staff, summaryText, c, post = {};
   try {
     rowData = readRowMap_(sheet, row);
     var currentStatus = String(rowData.map['処理結果'] || '');
@@ -611,73 +776,36 @@ function processResponseRow_(sheet, row, opts) {
     writeResultCells_(sheet, row, { '処理結果': FI_STATUS_.PROCESSING, '処理日時': nowJa_(), 'エラー': '' });
     SpreadsheetApp.flush();
 
-    var products = getProductsData().data;
-    lines = parseLines_(kind, rowData.map, products);
     staff = resolveStaff_(rowData.map[FI_Q_.STAFF]);
-    var staffName = String(rowData.map[FI_Q_.STAFF] || '').trim() || '不明';
-    var dateValue = rowData.map[kind === 'in' ? FI_Q_.IN_DATE : FI_Q_.OUT_DATE];
-    var baseDate = toDate_(dateValue) || toDate_(rowData.values[0]) || new Date();
-    var yy = yearSuffix_(baseDate);
-    var dest = kind === 'out' ? String(rowData.map[FI_Q_.DEST] || '').trim() : '';
+    var baseDate = toDate_(spec.dateTitle ? rowData.map[spec.dateTitle] : null) || toDate_(rowData.values[0]) || new Date();
+    c = {
+      spec: spec,
+      kind: kind,
+      sheet: sheet,
+      row: row,
+      ref: ref,
+      rowData: rowData,
+      map: rowData.map,
+      products: getProductsData().data,
+      staff: staff,
+      staffName: String(rowData.map[FI_Q_.STAFF] || '').trim() || '不明',
+      baseDate: baseDate,
+      yy: yearSuffix_(baseDate)
+    };
 
     // --- 在庫・履歴・発注の更新（ここは業務上重要なので先に確定させる） ---
-    var summaryLines = [];
-    lines.forEach(function(line) {
-      var p = products[line.code];
-      var before = Number(p.stock) || 0;
-      var after = kind === 'in' ? before + line.quantity : Math.max(0, before - line.quantity);
-      var partial = { stock: after };
-      if (kind === 'in') {
-        var consumed = consumeDeliveries_(p, line.quantity);
-        if (consumed) {
-          partial.ordered = consumed.ordered;
-          partial.deliveries = consumed.deliveries;
-        }
-      }
-      updateSingleProduct(line.code, partial);
+    var handled = spec.handle(c) || {};
+    summaryText = handled.summary || '';
+    post = handled.post || {};
 
-      var note = kind === 'in'
-        ? 'フォーム入荷: ' + line.boxes + '箱 入力者:' + staffName
-        : 'フォーム出荷: ' + line.boxes + '箱' + (line.pieces ? '(+' + line.pieces + '個)' : '') + ' 入力者:' + staffName + (dest ? ' 出荷先:' + dest : '');
-      addHistoryRecord({
-        date: nowJa_(),
-        type: kind,
-        productCode: line.code,
-        productName: p.name,
-        quantity: line.quantity,
-        note: note
-      });
-
-      summaryLines.push(p.name + '（' + line.code + '）: ' + (kind === 'in' ? '+' : '-') + line.quantity + '個 → 在庫 ' + after + '個');
-
-      if (kind === 'out') {
-        var safe = Number(p.safeStock) || 0;
-        if (after < safe) lowStock.push({ code: line.code, name: p.name, stock: after, safeStock: safe });
-      }
-      line.after = after;
-      line.name = p.name;
-      line.unitQuantity = Number(p.quantity) || 0;
-    });
-
-    // --- 箱台帳: 採番と登録（入荷のみ） ---
-    var rangeText = '';
-    if (kind === 'in') {
-      var rangeParts = [];
-      lines.forEach(function(line) {
-        var numbers = reserveBoxNumbers_(line.code, yy, line.boxes, 'form', ref);
-        labelItems.push({ productCode: line.code, productName: line.name, unitQuantity: line.unitQuantity, year: yy, numbers: numbers });
-        rangeParts.push(formatQrText_(line.code, yy, numbers[0]) + '〜' + pad4_(numbers[numbers.length - 1]));
-      });
-      rangeText = rangeParts.join(', ');
-    }
-
-    summaryText = summaryLines.join('\n');
-    writeResultCells_(sheet, row, {
+    var cells = {
       '処理結果': FI_STATUS_.STOCK_DONE,
       '処理日時': nowJa_(),
       '在庫反映内容': summaryText,
-      'ラベル番号範囲': rangeText
-    });
+      'ラベル番号範囲': ''
+    };
+    Object.keys(handled.cells || {}).forEach(function(k) { cells[k] = handled.cells[k]; });
+    writeResultCells_(sheet, row, cells);
     SpreadsheetApp.flush();
   } catch (err) {
     writeResultCells_(sheet, row, { '処理結果': FI_STATUS_.ERROR, '処理日時': nowJa_(), 'エラー': String(err.message || err) });
@@ -691,21 +819,12 @@ function processResponseRow_(sheet, row, opts) {
 
   // --- ロック外: PDF 作成とメール（失敗しても在庫は確定済み） ---
   var recipient = (staff && staff.email) ? staff.email : getConfigValue_('adminEmail', '');
-  var staffLabel = String(rowData.map[FI_Q_.STAFF] || '').trim() || '不明';
+  var staffLabel = c.staffName;
   try {
-    if (kind === 'in') {
-      var labels = labelsFromBoxItems_(labelItems);
-      var fileName = 'ラベル_' + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyyMMdd_HHmm') + '_' +
-        labelItems.map(function(it) { return it.productCode; }).join('+').slice(0, 60);
-      var pdf = buildLabelPdf_(labels, { fileName: fileName });
-      sendLabelMail_(recipient, staffLabel, pdf, labelItems, summaryText, !(staff && staff.email));
-      writeResultCells_(sheet, row, { '処理結果': FI_STATUS_.DONE, '処理日時': nowJa_(), 'PDF URL': pdf.pdfFile.getUrl() });
-    } else {
-      if (lowStock.length && String(getConfigValue_('lowStockMail', 'TRUE')).toUpperCase() === 'TRUE') {
-        sendLowStockMail_(recipient, lowStock, staffLabel);
-      }
-      writeResultCells_(sheet, row, { '処理結果': FI_STATUS_.DONE, '処理日時': nowJa_() });
-    }
+    var doneCells = (spec.postLock ? spec.postLock(c, post, recipient, staffLabel, summaryText) : null) || {};
+    var finalCells = { '処理結果': FI_STATUS_.DONE, '処理日時': nowJa_() };
+    Object.keys(doneCells).forEach(function(k) { finalCells[k] = doneCells[k]; });
+    writeResultCells_(sheet, row, finalCells);
   } catch (err2) {
     writeResultCells_(sheet, row, { '処理結果': FI_STATUS_.PDF_FAILED, '処理日時': nowJa_(), 'エラー': String(err2.message || err2) });
     sendAdminMail_('【お守り在庫】ラベルPDF/メールの作成に失敗（' + ref + '）',
@@ -714,6 +833,102 @@ function processResponseRow_(sheet, row, opts) {
     return { status: FI_STATUS_.PDF_FAILED, message: String(err2.message || err2) };
   }
   return { status: FI_STATUS_.DONE };
+}
+
+/**
+ * 入荷・出荷の反映（ロック内）。仕様表の sign / hasDest / reserveBoxes / checkLowStock で分岐する。
+ *
+ * @param {Object} c processResponseRow_ が組み立てた処理コンテキスト
+ * @return {{summary:string, cells:Object, post:Object}}
+ */
+function handleStockLines_(c) {
+  var spec = c.spec;
+  var products = c.products;
+  var lines = parseLines_(c.kind, c.map, products);
+  var dest = spec.hasDest ? String(c.map[FI_Q_.DEST] || '').trim() : '';
+
+  var summaryLines = [];
+  var lowStock = [];
+  var labelItems = [];
+
+  lines.forEach(function(line) {
+    var p = products[line.code];
+    var before = Number(p.stock) || 0;
+    var after = spec.sign > 0 ? before + line.quantity : Math.max(0, before - line.quantity);
+    var partial = { stock: after };
+    if (spec.sign > 0) {
+      var consumed = consumeDeliveries_(p, line.quantity);
+      if (consumed) {
+        partial.ordered = consumed.ordered;
+        partial.deliveries = consumed.deliveries;
+      }
+    }
+    updateSingleProduct(line.code, partial);
+
+    var note = spec.sign > 0
+      ? 'フォーム入荷: ' + line.boxes + '箱 入力者:' + c.staffName
+      : 'フォーム出荷: ' + line.boxes + '箱' + (line.pieces ? '(+' + line.pieces + '個)' : '') + ' 入力者:' + c.staffName + (dest ? ' 出荷先:' + dest : '');
+    addHistoryRecord({
+      date: nowJa_(),
+      type: c.kind,
+      productCode: line.code,
+      productName: p.name,
+      quantity: line.quantity,
+      note: note
+    });
+
+    summaryLines.push(p.name + '（' + line.code + '）: ' + (spec.sign > 0 ? '+' : '-') + line.quantity + '個 → 在庫 ' + after + '個');
+
+    if (spec.checkLowStock) {
+      var safe = Number(p.safeStock) || 0;
+      if (after < safe) lowStock.push({ code: line.code, name: p.name, stock: after, safeStock: safe });
+    }
+    line.after = after;
+    line.name = p.name;
+    line.unitQuantity = Number(p.quantity) || 0;
+  });
+
+  // --- 箱台帳: 採番と登録（入荷のみ） ---
+  var rangeText = '';
+  if (spec.reserveBoxes) {
+    var rangeParts = [];
+    lines.forEach(function(line) {
+      var numbers = reserveBoxNumbers_(line.code, c.yy, line.boxes, 'form', c.ref);
+      labelItems.push({ productCode: line.code, productName: line.name, unitQuantity: line.unitQuantity, year: c.yy, numbers: numbers });
+      rangeParts.push(formatQrText_(line.code, c.yy, numbers[0]) + '〜' + pad4_(numbers[numbers.length - 1]));
+    });
+    rangeText = rangeParts.join(', ');
+  }
+
+  return {
+    summary: summaryLines.join('\n'),
+    cells: { 'ラベル番号範囲': rangeText },
+    post: { labelItems: labelItems, lowStock: lowStock }
+  };
+}
+
+/**
+ * 入荷のロック外処理: ラベルPDFを作って入力者へメールする
+ */
+function postLockIntake_(c, post, recipient, staffLabel, summaryText) {
+  var labelItems = post.labelItems || [];
+  var labels = labelsFromBoxItems_(labelItems);
+  var fileName = 'ラベル_' + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyyMMdd_HHmm') + '_' +
+    labelItems.map(function(it) { return it.productCode; }).join('+').slice(0, 60);
+  var pdf = buildLabelPdf_(labels, { fileName: fileName });
+  sendLabelMail_(recipient, staffLabel, pdf, labelItems, summaryText, !(c.staff && c.staff.email));
+  return { 'PDF URL': pdf.pdfFile.getUrl() };
+}
+
+/**
+ * 出荷のロック外処理: 安心在庫を下回っていれば通知する
+ */
+function postLockShipping_(c, post, recipient, staffLabel, summaryText) {
+  var lowStock = post.lowStock || [];
+  if (lowStock.length && String(getConfigValue_('lowStockMail', 'TRUE')).toUpperCase() === 'TRUE') {
+    sendLowStockMail_(recipient, lowStock, staffLabel);
+  }
+  return {};
 }
 
 /**
@@ -742,7 +957,8 @@ function writeResultCells_(sheet, row, obj) {
  * @return {Array<{slot:number, code:string, boxes:number, pieces:number, quantity:number}>}
  */
 function parseLines_(kind, map, products) {
-  var slots = kind === 'in' ? FI_IN_SLOTS_ : FI_OUT_SLOTS_;
+  var spec = getFormSpec_(kind);
+  var slots = spec ? spec.slots : 0;
   var maxPerLine = Number(getConfigValue_('maxBoxesPerLine', 50)) || 50;
   var maxTotal = Number(getConfigValue_('maxBoxesPerSubmission', 80)) || 80;
   var lines = [];
@@ -766,7 +982,7 @@ function parseLines_(kind, map, products) {
     seen[code] = true;
 
     var boxes = hasBoxes ? Number(String(boxesRaw).trim()) : 0;
-    var pieces = (kind === 'out' && hasPieces) ? Number(String(piecesRaw).trim()) : 0;
+    var pieces = (spec.hasPieces && hasPieces) ? Number(String(piecesRaw).trim()) : 0;
     if (!isFinite(boxes) || boxes < 0 || Math.floor(boxes) !== boxes) throw new Error('箱数' + i + ' は 0 以上の整数で入力してください: ' + boxesRaw);
     if (!isFinite(pieces) || pieces < 0 || Math.floor(pieces) !== pieces) throw new Error('端数' + i + ' は 0 以上の整数で入力してください: ' + piecesRaw);
     if (kind === 'in' && boxes < 1) throw new Error('箱数' + i + ' は 1 以上で入力してください');
