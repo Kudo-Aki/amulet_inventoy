@@ -93,9 +93,17 @@ async function apiPost(action, data = {}) {
         try {
             return JSON.parse(text);
         } catch (e) {
-            // JSONパースに失敗してもリクエストは成功とみなす
-            console.log('Response text:', text);
-            return { success: true };
+            // JSON でない応答を「成功」と見なしてはいけない。
+            // GAS のデプロイで「アクセスできるユーザー」が「全員」になっていないと
+            // ログイン画面の HTML が返るため、以前の実装（return { success: true }）では
+            // 「画面は保存成功、スプレッドシートは空」という無言失敗になっていた。
+            // アカウント移行やデプロイ作り直しの直後に最も起こりやすい。
+            console.error('APIがJSON以外を返しました:', String(text).slice(0, 500));
+            const looksLikeHtml = /<html|<!DOCTYPE/i.test(text);
+            const hint = looksLikeHtml
+                ? 'ログイン画面かエラーページが返っています。GASのデプロイで「アクセスできるユーザー」が「全員」になっているか、URLが /exec で終わっているかを確認してください。'
+                : '応答がJSONではありません。';
+            throw new Error('APIの応答を解釈できませんでした（HTTP ' + response.status + '）。' + hint);
         }
     } catch (e) {
         console.error('APIエラー:', e);

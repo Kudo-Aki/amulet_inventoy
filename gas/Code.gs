@@ -45,13 +45,42 @@ function initializeSpreadsheet() {
   const existingId = PropertiesService.getScriptProperties().getProperty(SPREADSHEET_ID_KEY);
 
   if (existingId) {
+    // 「既存のスプレッドシートが開けるか」と「確認ダイアログを出せるか」を
+    // 別々の try で判定する。ここを1つの try にまとめてはいけない:
+    // スタンドアロンのスクリプトでは SpreadsheetApp.getUi() が必ず例外になるため、
+    // IDが有効でも確認ダイアログが出ないまま新規作成に落ち、
+    // 既存データへのリンクが黙って失われる。
+    let existingSs = null;
     try {
-      const existingSs = SpreadsheetApp.openById(existingId);
-      const ui = SpreadsheetApp.getUi();
+      existingSs = SpreadsheetApp.openById(existingId);
+    } catch (e) {
+      Logger.log('既存のスプレッドシート（' + existingId + '）を開けませんでした。新しく作成します: ' + e);
+    }
+
+    if (existingSs) {
+      let ui = null;
+      try {
+        ui = SpreadsheetApp.getUi();
+      } catch (e) {
+        ui = null;  // スタンドアロン実行では UI が無い
+      }
+
+      if (!ui) {
+        throw new Error(
+          '既にスプレッドシートが設定されています: ' + existingSs.getName() +
+          '（ID: ' + existingId + '）\n\n' +
+          'この関数は新しい空のスプレッドシートを作ってスクリプトプロパティを上書きするため、' +
+          'アプリが既存データを見られなくなります。\n\n' +
+          '別のスプレッドシートに切り替えたいときは、「プロジェクトの設定 → スクリプト プロパティ」で ' +
+          SPREADSHEET_ID_KEY + ' の値を直接書き換えてください。\n' +
+          '本当に新規作成したいときは、先にそのプロパティを削除してから実行してください。'
+        );
+      }
+
       const response = ui.alert(
         '確認',
-        '既にスプレッドシートが存在します。新しく作成しますか？\n' +
-        '（既存のデータは保持されます）\n\n' +
+        '既にスプレッドシートが設定されています。新しく作成しますか？\n' +
+        '（既存のスプレッドシート自体は残りますが、アプリは新しい空のスプレッドシートを使うようになります）\n\n' +
         '既存のスプレッドシート: ' + existingSs.getName(),
         ui.ButtonSet.YES_NO
       );
@@ -60,8 +89,6 @@ function initializeSpreadsheet() {
         ui.alert('キャンセルしました。');
         return;
       }
-    } catch (e) {
-      // 既存のスプレッドシートにアクセスできない場合は新規作成
     }
   }
 
