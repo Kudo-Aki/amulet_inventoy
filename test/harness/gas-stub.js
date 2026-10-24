@@ -204,6 +204,8 @@ class Form {
   isPublished() { return this.published; }
   setAcceptingResponses(v) { this.acceptingResponses = !!v; return this; }
   isAcceptingResponses() { return this.acceptingResponses; }
+  setCustomClosedFormMessage(m) { this.closedMessage = String(m); return this; }
+  getCustomClosedFormMessage() { return this.closedMessage || ''; }
   setCollectEmail(v) { this.settings.collectEmail = v; return this; }
   setLimitOneResponsePerUser(v) { this.settings.limitOne = v; return this; }
   setAllowResponseEdits(v) { this.settings.allowEdits = v; return this; }
@@ -231,7 +233,7 @@ class Form {
     return this;
   }
   // テスト用
-  dumpForm() { return { id: this.id, title: this.title, published: this.published, destinationId: this.destinationId, settings: this.settings }; }
+  dumpForm() { return { id: this.id, title: this.title, published: this.published, accepting: this.acceptingResponses, closedMessage: this.closedMessage || '', destinationId: this.destinationId, settings: this.settings }; }
   dumpItems() {
     return this.items.map(i => ({ type: i.type, title: i.title, required: i.required, help: i.helpText, choices: i.choices, validation: i.validation }));
   }
@@ -372,6 +374,7 @@ function makeContext(extra) {
     __props: props,
     __lockAcquires: 0,
     __lockReleases: 0,
+    __shared: [],   // addEditor の記録
     __setNow: (v) => { nowOverride = v === null ? null : (v instanceof RealDate ? v.getTime() : Number(v)); },
     __advance: (ms) => { if (nowOverride === null) nowOverride = RealDate.now(); nowOverride += ms; },
     __isLocked: () => lockHeld > 0,
@@ -422,8 +425,34 @@ function makeContext(extra) {
     DriveApp: {
       getFoldersByName: () => ({ hasNext: () => false }),
       createFolder: (n) => ({ getId: () => 'FOLDER', getUrl: () => 'https://drive/folder', createFile: (b) => ({ getUrl: () => 'https://drive/file/' + b.name }) }),
-      getFolderById: (id) => ({ getId: () => id, getUrl: () => 'https://drive/folder/' + id, createFile: (b) => ({ getUrl: () => 'https://drive/file/' + b.name }) }),
-      getFileById: () => ({ moveTo() {}, makeCopy: () => ({ getId: () => 'COPY', getUrl: () => 'https://slides/COPY', setTrashed() {} }), getAs: () => ({ setName(n) { this.name = n; return this; } }) }),
+      getFolderById: (id) => ({ getId: () => id, getUrl: () => 'https://drive/folder/' + id, addEditor: (email) => { ctx.__shared.push({ id, email }); }, createFile: (b) => ({ getUrl: () => 'https://drive/file/' + b.name }) }),
+      getFileById: (id) => {
+        const src = spreadsheets[id] || null;
+        return {
+          getId: () => id,
+          getName: () => (src ? src.getName() : 'FILE_' + id),
+          getUrl: () => (src ? src.getUrl() : 'https://drive/file/' + id),
+          moveTo() {},
+          addEditor: (email) => { ctx.__shared.push({ id, email }); },
+          // スプレッドシートなら本物と同じく「中身ごと複製された別のブック」を作る。
+          // ダミーを返すと migration_4_adopt のコピー経路を検証できない。
+          makeCopy: (name) => {
+            if (!src) return { getId: () => 'COPY', getName: () => name || 'COPY', getUrl: () => 'https://slides/COPY', setTrashed() {} };
+            const newId = 'SS' + (++ssSeq);
+            const dup = new Spreadsheet(newId, name || (src.getName() + ' のコピー'));
+            src.getSheets().forEach(sh => {
+              const ns = dup.insertSheet(sh.getName());
+              sh.cells.forEach((v, k) => ns.cells.set(k, v));
+              ns._recalc();
+              // コピーするとフォームとのリンクは切れる（本物と同じ）
+              ns.formUrl = null;
+            });
+            spreadsheets[newId] = dup;
+            return { getId: () => newId, getName: () => dup.getName(), getUrl: () => dup.getUrl(), setTrashed() {} };
+          },
+          getAs: () => ({ setName(n) { this.name = n; return this; } }),
+        };
+      },
       createFile: (b) => ({ getUrl: () => 'https://drive/file/' + b.name }),
       Access: { ANYONE_WITH_LINK: 1 }, Permission: { VIEW: 1 },
     },
