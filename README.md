@@ -148,6 +148,10 @@ Googleスプレッドシート連携（API設定）を使っている場合、Go
 > QRラベルの読み取りがこの形を前提にしているためで、破ると以後に作った商品のスキャンが通らなくなります。
 
 セットアップ手順と運用方法は [docs/google_form_guide.md](docs/google_form_guide.md) を参照してください。
+
+個人の Google アカウントから Google Workspace アカウントへ移す手順は
+[docs/workspace_migration_guide.md](docs/workspace_migration_guide.md) にまとめてあります
+（デプロイURLの貼り替え、箱番号の突き合わせ、旧フォームからの無言失敗の防ぎ方など）。
 GAS 側のコードは `gas/` フォルダにあります（`Code.gs` と追加ファイル）。
 
 ## トラブルシューティング

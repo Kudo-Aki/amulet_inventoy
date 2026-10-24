@@ -581,7 +581,15 @@
                 </li>
                 <li>
                     <strong>初期化を実行</strong><br>
-                    「initializeSpreadsheet」関数を選択して実行（初回のみ権限承認が必要）
+                    「initializeSpreadsheet」関数を選択して実行（初回のみ権限承認が必要）<br>
+                    <strong style="color:#8B0000;">※ これは新規構築のときだけです。</strong>
+                    既にスプレッドシートを使っている場合は実行しないでください
+                    （新しい空のスプレッドシートが作られ、アプリが既存データを見られなくなります）。
+                    別のスプレッドシートに切り替えたいときは「プロジェクトの設定 → スクリプト プロパティ」の
+                    <code>OMAMORI_SPREADSHEET_ID</code> を直接書き換えます。
+                    アカウント移行の手順は
+                    <a href="../docs/workspace_migration_guide.md" target="_blank" rel="noopener">docs/workspace_migration_guide.md</a>
+                    を参照してください
                 </li>
                 <li>
                     <strong>Webアプリとしてデプロイ</strong><br>

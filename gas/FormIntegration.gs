@@ -516,7 +516,17 @@ function setupFormIntegration() {
 
   var forms = ensureForms_(ss, folder);
   FI_KIND_ORDER_.forEach(function(kind) {
-    log.push(getFormSpec_(kind).label + 'フォーム: ' + forms[kind].getPublishedUrl());
+    var form = forms[kind];
+    var warn = '';
+    try {
+      // 未公開のフォームは URL が発行されても回答を受け付けない
+      if (typeof form.isPublished === 'function' && !form.isPublished()) {
+        warn = '  ★未公開です（このままでは回答を受け付けません）';
+      }
+    } catch (e) {
+      warn = '';
+    }
+    log.push(getFormSpec_(kind).label + 'フォーム: ' + form.getPublishedUrl() + warn);
   });
 
   ensureBackupSheets_();
@@ -589,6 +599,16 @@ function createIntakeForm_(ss, folder, kind) {
   if (!spec) throw new Error('未知のフォーム種別: ' + kind);
 
   var form = FormApp.create(spec.formTitle);
+  // Forms API 経由で作られたフォームは未公開状態で作られ、公開しないと回答を
+  // 受け付けない（Google の「API changes to Google Forms」）。
+  // FormApp.create() に同じ規則が及ぶかは公式に明言されていないため、
+  // 念のため明示的に公開しておく（既に公開なら無害）。
+  // setPublished が無い実行環境でも落ちないように存在確認してから呼ぶ。
+  try {
+    if (typeof form.setPublished === 'function') form.setPublished(true);
+  } catch (e) {
+    Logger.log('警告: ' + spec.label + 'フォームの公開状態を設定できませんでした: ' + e);
+  }
   form.setDescription(spec.description);
   form.setCollectEmail(false);
   form.setLimitOneResponsePerUser(false);
