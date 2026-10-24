@@ -10,7 +10,7 @@ const { makeContext } = require('./gas-stub');
 
 const GAS_DIR = path.join(__dirname, '..', '..', 'gas');
 // Code.gs を先に読む（SHEET_NAMES などの const を FormIntegration.gs が参照する）
-const FILES = ['Code.gs', 'QRCode.gs', 'LabelTemplate.gs', 'LabelPdf.gs', 'FormIntegration.gs', 'Tests.gs'];
+const FILES = ['Code.gs', 'QRCode.gs', 'LabelTemplate.gs', 'LabelPdf.gs', 'FormIntegration.gs', 'Migration.gs', 'Tests.gs'];
 
 // JSON.stringify で比べる。vm コンテキストで作られたオブジェクトは realm が違うため
 // assert.deepStrictEqual が「構造は同じだが参照が同一でない」で落ちる。
@@ -68,7 +68,9 @@ function boot(opts) {
       count: labels.length,
     };
   };
-  ctx.ensureLabelTemplate_ = () => 'TPL';
+  // 本物（gas/LabelPdf.gs）は作成後に labelTemplateId を設定シートへ書く。
+  // ここを省くと「テンプレート未作成」と誤判定される。
+  ctx.ensureLabelTemplate_ = () => { ctx.setConfigValue_('labelTemplateId', 'TPL'); return 'TPL'; };
 
   ctx.__setNow(opts.now || new Date(2026, 8, 9, 3, 0, 0));
   return ctx;

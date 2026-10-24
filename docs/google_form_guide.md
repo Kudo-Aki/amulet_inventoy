@@ -49,6 +49,7 @@ GAS が 商品管理シート（現在庫・発注状況）と 履歴シート �
    - `LabelPdf.gs`
    - `LabelTemplate.gs`
    - `QRCode.gs`
+   - `Migration.gs`（アカウント移行用。移行しないなら不要）
    - `Tests.gs`
 3. 既存の `Code.gs` を `gas/Code.gs` の内容で置き換えます。変更点は3つだけです。
    - `doGet` の `default:` で拡張アクションに委譲する
