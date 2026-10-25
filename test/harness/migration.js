@@ -20,6 +20,16 @@ const memoOf = (ctx, ss) => {
   return map;
 };
 
+const KINDS = ['in', 'out', 'inv', 'product'];
+
+/** いま設定シートが指している4本のフォーム（スタブの Form オブジェクト） */
+const formsOf = (ctx) => KINDS
+  .map(k => ctx.__forms[String(ctx.getConfigValue_(ctx.getFormSpec_(k).formIdKey, ''))])
+  .filter(Boolean);
+
+/** 4本のフォームすべてに失敗注入を仕掛ける */
+const failAllForms = (ctx, failOn) => formsOf(ctx).forEach(f => { f.__failOn = failOn; });
+
 /** 旧環境を一通り作る: フォーム4本・トリガー・箱台帳・入荷1件 */
 function bootOldEnv() {
   const ctx = boot();
@@ -129,6 +139,120 @@ s.test('migration_2_freeze は未処理の回答を先に捌いてから止め�
   assert.strictEqual(ctx.__triggers.length, 0);
 });
 
+// Google がフォームの公開モデルを変えたため、本番で setAcceptingResponses(false) が
+// 「フォームを更新するデータが無効です」で4本すべて失敗した。片方の API が通らなくても
+// もう片方で閉じられること、どちらも通らなければ**トリガーを消さずに止まること**を守る。
+
+s.test('setAcceptingResponses が失敗しても setPublished で閉じられる', () => {
+  const ctx = bootOldEnv();
+  ctx.migration_1_snapshot();
+  failAllForms(ctx, { setAcceptingResponses: 'Exception: フォームを更新するデータが無効です。' });
+
+  const out = ctx.migration_2_freeze();
+
+  assert.strictEqual(ctx.__triggers.length, 0, 'フォームは閉じられたのでトリガーも消える');
+  formsOf(ctx).forEach(f => assert.strictEqual(f.isPublished(), false, f.getTitle() + ' が未公開になる'));
+  assert.ok(out.includes('setAcceptingResponses(false): ★失敗'), '失敗した API がログに残る');
+  assert.ok(out.includes('次: migration_3_share()'), out);
+});
+
+s.test('setPublished が無い/失敗する環境でも setAcceptingResponses で閉じられる', () => {
+  const ctx = bootOldEnv();
+  ctx.migration_1_snapshot();
+  const forms = formsOf(ctx);
+  forms[0].setPublished = undefined;                       // 古いランタイム（メソッドが無い）
+  forms.slice(1).forEach(f => { f.__failOn = { setPublished: true }; });
+
+  ctx.migration_2_freeze();
+
+  assert.strictEqual(ctx.__triggers.length, 0);
+  forms.forEach(f => assert.strictEqual(f.isAcceptingResponses(), false, f.getTitle() + ' の受付が止まる'));
+});
+
+// ★今回の再発防止。フォームが閉じられないのにトリガーだけ消すのが最悪の状態
+s.test('両方の API が失敗したら migration_2_freeze は中断し、トリガーを消さない', () => {
+  const ctx = bootOldEnv();
+  ctx.migration_1_snapshot();
+  failAllForms(ctx, {
+    setPublished: 'Exception: フォームを更新するデータが無効です。',
+    setAcceptingResponses: 'Exception: フォームを更新するデータが無効です。',
+  });
+
+  assert.throws(() => ctx.migration_2_freeze(), (e) => {
+    const m = String(e.message);
+    assert.ok(m.includes('トリガーはまだ削除していません'), m);
+    assert.ok(m.includes('migration_diagnoseForms()'), '原因の調べ方を案内する');
+    assert.ok(m.includes('migration_2_freeze_skipForms()'), '回避策を案内する');
+    return true;
+  });
+
+  assert.strictEqual(ctx.__triggers.length, 4, '★トリガーが残る（回答は処理され続ける）');
+  formsOf(ctx).forEach(f => assert.strictEqual(f.isAcceptingResponses(), true, '受付中のまま'));
+});
+
+s.test('手でフォームを閉じたあとは migration_closeOldForms() だけ再実行できる', () => {
+  const ctx = bootOldEnv();
+  ctx.migration_1_snapshot();
+  failAllForms(ctx, { setPublished: true, setAcceptingResponses: true });
+  assert.strictEqual(ctx.migration_closeOldForms().failed.length, 4);
+
+  // 画面から手動で受付を止めた状況
+  formsOf(ctx).forEach(f => { f.__failOn = null; f.setAcceptingResponses(false); f.__failOn = { setPublished: true, setAcceptingResponses: true }; });
+
+  const r = ctx.migration_closeOldForms();
+  eqJ(r.failed, [], '閉じていれば API が失敗しても成功と判定する');
+  assert.strictEqual(r.closed.length, 4);
+  ctx.migration_2_freeze();
+  assert.strictEqual(ctx.__triggers.length, 0, '止まっていれば先へ進める');
+});
+
+s.test('閉鎖メッセージだけ失敗しても受付停止は成功扱いになる', () => {
+  const ctx = bootOldEnv();
+  ctx.migration_1_snapshot();
+  failAllForms(ctx, { setCustomClosedFormMessage: 'Exception: 無効です。' });
+
+  const out = ctx.migration_2_freeze();
+
+  assert.strictEqual(ctx.__triggers.length, 0);
+  assert.ok(out.includes('受付停止の成否には影響しません'), out);
+});
+
+s.test('migration_2_freeze_skipForms はフォームを閉じられなくても先へ進む', () => {
+  const ctx = bootOldEnv();
+  ctx.migration_1_snapshot();
+  failAllForms(ctx, { setPublished: true, setAcceptingResponses: true });
+
+  const out = ctx.migration_2_freeze_skipForms();
+
+  assert.strictEqual(ctx.__triggers.length, 0, '関門を飛ばすのでトリガーは消える');
+  assert.ok(out.includes('フォームを閉じられないまま先へ進みました'), out);
+  assert.ok(out.includes('画面から必ず受付を止めてください'), '危険を伝える');
+});
+
+s.test('migration_diagnoseForms はフォームの状態を変えない', () => {
+  const ctx = bootOldEnv();
+  const before = formsOf(ctx).map(f => [f.isPublished(), f.isAcceptingResponses(), f.getCustomClosedFormMessage()]);
+  formsOf(ctx)[1].__failOn = { setAcceptingResponses: 'Exception: フォームを更新するデータが無効です。' };
+
+  const out = ctx.migration_diagnoseForms();
+
+  eqJ(formsOf(ctx).map(f => [f.isPublished(), f.isAcceptingResponses(), f.getCustomClosedFormMessage()]),
+    before, '公開状態・受付状態・閉鎖メッセージが変わらない');
+  assert.strictEqual(ctx.__triggers.length, 4, 'トリガーも触らない');
+  assert.ok(out.includes('setAcceptingResponses(いまと同じ値): ★失敗'), '失敗する API を特定できる');
+  assert.ok(out.includes('setPublished(いまと同じ値): 成功'), '通る API も分かる');
+});
+
+s.test('migration_diagnoseForms は状態が読めない API を無理に試さない', () => {
+  const ctx = bootOldEnv();
+  failAllForms(ctx, { isAcceptingResponses: 'Exception: 読めません。' });
+
+  const out = ctx.migration_diagnoseForms();
+
+  assert.ok(out.includes('isAcceptingResponses(): ★読めません'), out);
+  assert.ok(out.includes('setAcceptingResponses(): いまの値が読めないので試しません'), out);
+});
+
 // --- 3. 引き渡し -----------------------------------------------------------
 
 s.test('migration_3_share はメールアドレス未記入だと実行を拒む', () => {
@@ -230,9 +354,12 @@ s.test('migration_4_adopt の後に setupFormIntegration すると新しいフ�
 
 // --- 5. 突き合わせ ---------------------------------------------------------
 
-function migrateAll() {
+function migrateAll(opts) {
   const ctx = bootOldEnv();
   ctx.migration_1_snapshot();
+  // 本番の手順は snapshot → freeze → share → adopt。freeze を飛ばすと旧フォームが
+  // 受付中のまま残る（それを検出することも migration_5_verify の役目）
+  if (!(opts && opts.skipFreeze)) ctx.migration_2_freeze();
   delete ctx.__props.OMAMORI_SPREADSHEET_ID;
   ctx.FI_CONFIG_CACHE_ = null;
   ctx.MIGRATION_OLD_SPREADSHEET_ID = 'SSID';
@@ -279,6 +406,23 @@ s.test('migration_5_verify が未公開・受付停止のフォームを検出�
   const out = ctx.migration_5_verify();
   assert.ok(out.includes('★NG') && out.includes('棚卸フォーム') && out.includes('未公開'), out);
   assert.ok(out.includes('このままでは回答を受け付けません'), out);
+});
+
+// 旧フォームが受付中のまま残ると、回答できるのに誰も処理しない（在庫に反映されず通知もない）
+s.test('migration_5_verify が受付中の旧フォームを検出する', () => {
+  const ctx = migrateAll({ skipFreeze: true });
+  const out = ctx.migration_5_verify();
+  assert.ok(out.includes('【旧フォーム】'), out);
+  assert.ok(out.includes('★NG') && out.includes('フォーム（旧）'), out);
+  assert.ok(out.includes('回答されても誰も処理しません'), '結果の意味を伝える');
+});
+
+s.test('migration_5_verify は閉じた旧フォームを OK と判定する', () => {
+  const ctx = migrateAll();                       // freeze 済み = 旧フォームは閉じている
+  const out = ctx.migration_5_verify();
+  assert.ok(out.includes('【旧フォーム】'), out);
+  assert.ok(out.includes('フォーム（旧）') && out.includes('受付停止'), out);
+  assert.ok(!out.includes('★NG'), out);
 });
 
 s.test('migration_5_verify がトリガー未設置を検出する', () => {

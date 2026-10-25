@@ -192,6 +192,7 @@ class Form {
     // こうしておくと、コード側が明示的に公開していなければテストが落ちて気づける。
     this.published = published === undefined ? false : !!published;
     this.acceptingResponses = true;
+    this.__failOn = null;
   }
   getId() { return this.id; }
   getTitle() { return this.title; }
@@ -200,11 +201,20 @@ class Form {
   setDescription(d) { this.description = d; return this; }
   getPublishedUrl() { return 'https://docs.google.com/forms/d/e/' + this.id + '/viewform'; }
   getEditUrl() { return 'https://docs.google.com/forms/d/' + this.id + '/edit'; }
-  setPublished(v) { this.published = !!v; return this; }
-  isPublished() { return this.published; }
-  setAcceptingResponses(v) { this.acceptingResponses = !!v; return this; }
-  isAcceptingResponses() { return this.acceptingResponses; }
-  setCustomClosedFormMessage(m) { this.closedMessage = String(m); return this; }
+  // テストから特定のメソッドを失敗させる。
+  //   form.__failOn = { setAcceptingResponses: 'フォームを更新するデータが無効です。' }
+  //   form.__failOn = { setPublished: true }      // 既定のメッセージで失敗
+  // Google 側の仕様変更で一部の API だけ通らなくなる状況を再現するために使う。
+  _maybeFail(name) {
+    const f = this.__failOn && this.__failOn[name];
+    if (!f) return;
+    throw new Error(typeof f === 'string' ? f : 'Exception: フォームを更新するデータが無効です。');
+  }
+  setPublished(v) { this._maybeFail('setPublished'); this.published = !!v; return this; }
+  isPublished() { this._maybeFail('isPublished'); return this.published; }
+  setAcceptingResponses(v) { this._maybeFail('setAcceptingResponses'); this.acceptingResponses = !!v; return this; }
+  isAcceptingResponses() { this._maybeFail('isAcceptingResponses'); return this.acceptingResponses; }
+  setCustomClosedFormMessage(m) { this._maybeFail('setCustomClosedFormMessage'); this.closedMessage = String(m); return this; }
   getCustomClosedFormMessage() { return this.closedMessage || ''; }
   setCollectEmail(v) { this.settings.collectEmail = v; return this; }
   setLimitOneResponsePerUser(v) { this.settings.limitOne = v; return this; }
