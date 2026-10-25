@@ -56,6 +56,78 @@ function bootOldEnv() {
   return ctx;
 }
 
+// --- 0. コードの自己点検 ---------------------------------------------------
+
+// 手で8ファイル貼ると1つ抜ける。旧プロジェクトを複製すると古いコードが来る。
+// Drive が v3 になるとラベルPDFと起案書作成だけが後から壊れる。
+// どれも本番で踏むと分かりにくいので、貼った直後に検出できるようにしている。
+
+s.test('migration_checkCode は揃っていれば OK を返す', () => {
+  const ctx = boot();
+  const r = ctx.migration_checkCode_();
+  assert.strictEqual(r.ok, true, r.log);
+  eqJ(r.ng, []);
+  assert.ok(r.log.includes('v2（Files.insert があります）'), r.log);
+  assert.ok(r.log.includes('コードは正しく入っています'), r.log);
+});
+
+s.test('migration_checkCode はスプレッドシートが無くても動く', () => {
+  const ctx = boot();
+  delete ctx.__props.OMAMORI_SPREADSHEET_ID;     // プロパティ設定より前の状態
+  const r = ctx.migration_checkCode_();
+  assert.strictEqual(r.ok, true, '貼った直後（＝最初にできる確認）として使える');
+});
+
+s.test('migration_checkCode が貼り忘れたファイルを名指しする', () => {
+  const ctx = boot();
+  // LabelTemplate.gs を貼り忘れた状態。vm では関数宣言のプロパティは delete できないので
+  // undefined を入れる（typeof が 'function' でなくなれば検出できる）
+  ctx.getLabelTemplatePptxBlob_ = undefined;
+  const r = ctx.migration_checkCode_();
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.log.includes('★NG LabelTemplate.gs'), r.log);
+  assert.ok(r.log.includes('getLabelTemplatePptxBlob_() がありません'), r.log);
+  assert.ok(r.log.includes('リポジトリの gas/ から LabelTemplate.gs を貼ってください'), r.log);
+});
+
+// エディタの「サービス」から手で Drive を足すと v3 が既定で選ばれる。
+// コードは v2 の Files.insert を呼ぶので、気づかないまま後で壊れる
+s.test('migration_checkCode が Drive v3 を検出する', () => {
+  const ctx = boot();
+  ctx.Drive = { Files: { create: () => ({ id: 'X' }) } };
+  const r = ctx.migration_checkCode_();
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.log.includes('★v3 が選ばれています'), r.log);
+  assert.ok(r.log.includes('ラベルPDFと起案書作成が失敗します'), '何が壊れるか伝える');
+  assert.ok(r.log.includes('appsscript.json'), '直し方を案内する');
+});
+
+s.test('migration_checkCode が Drive 未追加を検出する', () => {
+  const ctx = boot();
+  delete ctx.Drive;
+  const r = ctx.migration_checkCode_();
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.log.includes('詳細なサービスに Drive がありません'), r.log);
+});
+
+// 旧プロジェクトを複製すると、PR #3 より前の FormIntegration.gs が来る
+s.test('migration_checkCode が古い FormIntegration.gs を検出する', () => {
+  const ctx = boot();
+  ctx.createIntakeForm_ = function () { return null; };   // setPublished を呼ばない版
+  const r = ctx.migration_checkCode_();
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.log.includes('FormIntegration.gs がフォームを公開するか'), r.log);
+  assert.ok(r.log.includes('未公開のままになり'), '何が起きるか伝える');
+});
+
+s.test('migration_checkCode が古い Code.gs を検出する', () => {
+  const ctx = boot();
+  ctx.initializeSpreadsheet = function () { return null; };
+  const r = ctx.migration_checkCode_();
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.log.includes('Code.gs が initializeSpreadsheet を守るか'), r.log);
+});
+
 // --- 1. 記録 ---------------------------------------------------------------
 
 s.test('migration_1_snapshot が現状を「移行メモ」シートに記録する', () => {
@@ -585,6 +657,16 @@ s.test('migration_5_verify は状態が読めない旧フォームを OK と言�
   assert.ok(!/OK\s+\S*フォーム（旧）/.test(out), '読めないものを OK と書かない');
   assert.ok(!out.includes('★NG 入荷フォーム（旧）'), '読めないだけで NG にもしない');
   assert.ok(out.includes('旧アカウントで migration_closeOldForms()'), '確かめ方を案内する');
+});
+
+s.test('migration_5_verify がコードの自己点検も含める', () => {
+  const ctx = migrateAll();
+  assert.ok(ctx.migration_5_verify().includes('=== コードの自己点検 ==='), 'セクションが出る');
+
+  ctx.Drive = { Files: { create: () => ({ id: 'X' }) } };
+  const out = ctx.migration_5_verify();
+  assert.ok(out.includes('★v3 が選ばれています'), out);
+  assert.ok(!out.includes('自動で確認できる範囲はすべて OK'), 'コードの NG を合否に数える');
 });
 
 s.test('migration_5_verify がトリガー未設置を検出する', () => {

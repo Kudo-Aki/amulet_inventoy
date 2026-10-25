@@ -1,0 +1,6 @@
+# clasp（Apps Script CLI）。scriptId はアカウントごとに違うのでコミットしない
+gas/.clasp.json
+.clasprc.json
+
+# Node
+node_modules/
