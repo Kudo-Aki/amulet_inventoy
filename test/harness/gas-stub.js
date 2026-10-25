@@ -215,7 +215,7 @@ class Form {
   setAcceptingResponses(v) { this._maybeFail('setAcceptingResponses'); this.acceptingResponses = !!v; return this; }
   isAcceptingResponses() { this._maybeFail('isAcceptingResponses'); return this.acceptingResponses; }
   setCustomClosedFormMessage(m) { this._maybeFail('setCustomClosedFormMessage'); this.closedMessage = String(m); return this; }
-  getCustomClosedFormMessage() { return this.closedMessage || ''; }
+  getCustomClosedFormMessage() { this._maybeFail('getCustomClosedFormMessage'); return this.closedMessage || ''; }
   setCollectEmail(v) { this.settings.collectEmail = v; return this; }
   setLimitOneResponsePerUser(v) { this.settings.limitOne = v; return this; }
   setAllowResponseEdits(v) { this.settings.allowEdits = v; return this; }
