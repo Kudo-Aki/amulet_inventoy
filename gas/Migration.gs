@@ -11,6 +11,11 @@
  *   migration_2_freeze()     未処理を捌く → 旧フォームの受付停止 → 旧トリガー全削除
  *   migration_3_share()      新アカウントへ共有し、退避コピーを作る
  *
+ * 【うまくいかないとき】
+ *   migration_diagnoseForms()      どの Forms API が失敗するのか調べる（何も変更しない）
+ *   migration_closeOldForms()      旧フォームの受付停止だけをやり直す
+ *   migration_2_freeze_skipForms() フォームを閉じられないまま先へ進む（URL未配布のときだけ）
+ *
  * 【新アカウント】のプロジェクトに gas/ の全ファイル（これを含む）を貼ってから:
  *   migration_4_adopt()      旧ブックを自分のドライブへコピー → プロパティ設定 → 設定シートのID類を空に
  *   （ここで setupFormIntegration() を実行し、ウェブアプリをデプロイする）
@@ -182,6 +187,24 @@ function migration_readMemo_(ss) {
  * setupFormIntegration() で作り直せる。
  */
 function migration_2_freeze() {
+  return migration_freeze_(true);
+}
+
+/**
+ * migration_2_freeze() と同じだが、旧フォームを閉じられなくても先へ進む。
+ *
+ * ★フォームのURLを誰にも配っていない場合だけ使うこと。
+ *   URLを知っている人がいる状態でこれを使うと、「回答はできるが誰も処理しない」
+ *   状態になる。その回答は在庫に反映されず、エラー通知も出ない。
+ */
+function migration_2_freeze_skipForms() {
+  return migration_freeze_(false);
+}
+
+/**
+ * @param {boolean} requireFormsClosed 旧フォームを1本でも閉じられなければ中断するか
+ */
+function migration_freeze_(requireFormsClosed) {
   var ss = getSpreadsheet();
   if (!migration_readMemo_(ss)) {
     throw new Error('先に migration_1_snapshot() を実行してください。' +
@@ -203,24 +226,31 @@ function migration_2_freeze() {
   log.push('未処理の回答: 0 行');
 
   // --- フォームの受付を止める ---
-  FI_KIND_ORDER_.forEach(function(kind) {
-    var spec = getFormSpec_(kind);
-    var form = openFormIfExists_(getConfigValue_(spec.formIdKey, ''));
-    if (!form) {
-      log.push(spec.label + 'フォーム: 開けませんでした（手動で確認してください）');
-      return;
-    }
-    try {
-      form.setAcceptingResponses(false);
-      if (typeof form.setCustomClosedFormMessage === 'function') {
-        form.setCustomClosedFormMessage(
-          'このフォームは移行のため受付を終了しました。新しいフォームのURLは担当者にお問い合わせください。');
-      }
-      log.push(spec.label + 'フォーム: 受付を停止しました');
-    } catch (e) {
-      log.push(spec.label + 'フォーム: 受付停止に失敗 → ' + e + '（画面から手動で止めてください）');
-    }
-  });
+  // ★トリガー削除より先にやる。順序を逆にすると、フォームを閉じられなかったときに
+  //   「回答はできるが誰も処理しない」という最悪の中間状態を作ってしまう。
+  var forms = migration_closeOldForms();
+  log.push('');
+  log.push(forms.log);
+
+  if (forms.failed.length && requireFormsClosed) {
+    throw new Error(
+      '旧フォームの受付を止められませんでした: ' + forms.failed.join(' / ') + '\n' +
+      '\n' +
+      '★トリガーはまだ削除していません（意図した動作です）。\n' +
+      '  フォームが受付中のままトリガーだけ消すと、回答できるのに誰も処理しない\n' +
+      '  状態になります。その回答は在庫に反映されず、エラー通知も出ません。\n' +
+      '\n' +
+      '対処1: 各フォームを開く → 上の「回答」タブ → 「回答を受け付けています」をオフ\n' +
+      '       （または右上の「公開」を解除）→ migration_2_freeze() をもう一度実行\n' +
+      '対処2: どの API が失敗しているか調べる → migration_diagnoseForms()\n' +
+      '対処3: フォームのURLを誰にも配っておらず回答される心配が無いなら、\n' +
+      '       migration_2_freeze_skipForms() を実行（この関門を飛ばします）');
+  }
+  if (forms.failed.length) {
+    log.push('');
+    log.push('★フォームを閉じられないまま先へ進みました（migration_2_freeze_skipForms）。');
+    log.push('  URLを知っている人がいる場合は、画面から必ず受付を止めてください。');
+  }
 
   // --- トリガーを全削除 ---
   var triggers = ScriptApp.getProjectTriggers();
@@ -232,7 +262,11 @@ function migration_2_freeze() {
   log.push('残っているトリガー: ' + remain + ' 本' + (remain === 0 ? '' : ' ★0本になるまで繰り返してください'));
 
   log.push('');
-  log.push('次: migration_3_share() を実行してください');
+  if (remain === 0 && !forms.failed.length) {
+    log.push('次: migration_3_share() を実行してください');
+  } else {
+    log.push('★未解決の項目があります。上を確認してから migration_3_share() に進んでください。');
+  }
   Logger.log(log.join('\n'));
   return log.join('\n');
 }
@@ -256,6 +290,204 @@ function migration_countPending_(ss) {
     });
   });
   return count;
+}
+
+// ----------------------------------------
+// 2-a. 旧フォームの受付停止（単独で再実行できる）
+// ----------------------------------------
+
+var MIGRATION_CLOSED_MESSAGE_ =
+  'このフォームは移行のため受付を終了しました。新しいフォームのURLは担当者にお問い合わせください。';
+
+/**
+ * 旧フォーム4本の受付を止める。これだけを単独で何度でも実行できる。
+ *
+ * フォームの閉じ方は2通りある。Google 側の仕様変更でどちらかが通らないことがあるため、
+ * 両方を独立に試し、**最後に読み戻して本当に閉じたか確認する**。
+ *   (1) setPublished(false)          … 新しい公開モデル。未公開のフォームは回答できない
+ *   (2) setAcceptingResponses(false) … 従来のモデル
+ *
+ * 「成功」とログに出ても閉じていないことがあるので、判定は読み戻した状態だけで行う。
+ *
+ * @return {{closed: Array, failed: Array, skipped: Array, log: string}}
+ */
+function migration_closeOldForms() {
+  var log = ['=== 旧フォームの受付を止めます ==='];
+  var closed = [];
+  var failed = [];
+  var skipped = [];
+
+  FI_KIND_ORDER_.forEach(function(kind) {
+    var spec = getFormSpec_(kind);
+    var id = String(getConfigValue_(spec.formIdKey, '') || '').trim();
+    if (!id) {
+      log.push(spec.label + 'フォーム: 設定シートにIDがありません → 対象外');
+      skipped.push(spec.label);
+      return;
+    }
+    var form = openFormIfExists_(id);
+    if (!form) {
+      log.push(spec.label + 'フォーム: 開けませんでした（ID: ' + id + '）');
+      failed.push(spec.label + '=フォームを開けない');
+      return;
+    }
+
+    log.push(spec.label + 'フォーム（' + id + '）');
+    log.push('  いまの状態: ' + migration_formState_(form));
+
+    var reasons = [];
+    [['setPublished', false], ['setAcceptingResponses', false]].forEach(function(pair) {
+      var r = migration_tryFormCall_(form, pair[0], pair[1]);
+      log.push('  ' + pair[0] + '(false): ' + migration_callResultText_(r));
+      if (r.available && !r.ok) reasons.push(pair[0] + ' → ' + r.error);
+    });
+
+    // 閉鎖メッセージは本質ではないので独立した試行にする。失敗しても停止の成否には含めない
+    var rm = migration_tryFormCall_(form, 'setCustomClosedFormMessage', MIGRATION_CLOSED_MESSAGE_);
+    log.push('  閉鎖メッセージ: ' + migration_callResultText_(rm) +
+      (rm.available && !rm.ok ? '（受付停止の成否には影響しません）' : ''));
+
+    // ★ここだけが判定の根拠。ログの「成功」は証拠にしない
+    var state = migration_isFormClosed_(form);
+    log.push('  停止後の状態: ' + migration_formState_(form));
+    if (state === true) {
+      log.push('  → 受付を停止しました');
+      closed.push(spec.label);
+    } else if (state === false) {
+      log.push('  → ★まだ回答を受け付けます');
+      failed.push(spec.label + '=まだ受付中' + (reasons.length ? '（' + reasons.join(' / ') + '）' : ''));
+    } else {
+      log.push('  → ★状態を読み取れないため、停止できたか確認できません');
+      failed.push(spec.label + '=確認できない' + (reasons.length ? '（' + reasons.join(' / ') + '）' : ''));
+    }
+  });
+
+  log.push('');
+  log.push('停止できた: ' + (closed.length ? closed.join(' / ') : 'なし'));
+  if (skipped.length) log.push('対象外（IDなし）: ' + skipped.join(' / '));
+  if (failed.length) {
+    log.push('★停止できなかった: ' + failed.join(' / '));
+    log.push('  手動で閉じる: フォームを開く → 上の「回答」タブ → 「回答を受け付けています」をオフ');
+    log.push('  （または右上の「公開」を解除）→ migration_closeOldForms() で確認');
+    log.push('  原因を調べる: migration_diagnoseForms()');
+  }
+
+  Logger.log(log.join('\n'));
+  return { closed: closed, failed: failed, skipped: skipped, log: log.join('\n') };
+}
+
+/**
+ * どの Forms API が使えて、どれが失敗するのかを1本ずつ試して報告する。
+ *
+ * ★状態は変えない。setter も「いま読み取れた値と同じ値」を書くだけなので、
+ *   成功しても受付状態は変わらない（いまの値が読めないときは試さない）。
+ *
+ * 受付停止が失敗したときに1回実行して、ログをそのまま共有すれば原因が切り分けられる。
+ */
+function migration_diagnoseForms() {
+  var log = ['=== Forms API の診断（状態は変更しません）==='];
+
+  FI_KIND_ORDER_.forEach(function(kind) {
+    var spec = getFormSpec_(kind);
+    var id = String(getConfigValue_(spec.formIdKey, '') || '').trim();
+    log.push('');
+    log.push('【' + spec.label + 'フォーム】');
+    if (!id) { log.push('  設定シートにIDがありません'); return; }
+    log.push('  ID: ' + id);
+
+    var form = openFormIfExists_(id);
+    if (!form) { log.push('  ★開けません（IDが無効か、このアカウントに権限がない）'); return; }
+
+    try { log.push('  タイトル: ' + form.getTitle()); } catch (e) { log.push('  タイトル: 読めません → ' + e); }
+
+    // getter を試す。読めた値は setter の no-op 書き込みに使う
+    var reads = {};
+    [['isPublished', '公開状態'], ['isAcceptingResponses', '受付状態'],
+     ['getCustomClosedFormMessage', '閉鎖メッセージ']].forEach(function(pair) {
+      var name = pair[0];
+      if (typeof form[name] !== 'function') { log.push('  ' + name + '(): このバージョンには無い'); return; }
+      try {
+        var v = form[name]();
+        reads[name] = v;
+        log.push('  ' + name + '() = ' + JSON.stringify(v) + '（' + pair[1] + '）');
+      } catch (e) {
+        log.push('  ' + name + '(): ★読めません → ' + e);
+      }
+    });
+
+    // setter を「いまと同じ値」で試す（状態は変わらない）
+    [['setPublished', 'isPublished'],
+     ['setAcceptingResponses', 'isAcceptingResponses'],
+     ['setCustomClosedFormMessage', 'getCustomClosedFormMessage']].forEach(function(pair) {
+      var setter = pair[0];
+      if (typeof form[setter] !== 'function') { log.push('  ' + setter + '(): このバージョンには無い'); return; }
+      if (!(pair[1] in reads)) {
+        log.push('  ' + setter + '(): いまの値が読めないので試しません（状態を変えないため）');
+        return;
+      }
+      var r = migration_tryFormCall_(form, setter, reads[pair[1]]);
+      log.push('  ' + setter + '(いまと同じ値): ' + migration_callResultText_(r));
+    });
+  });
+
+  log.push('');
+  log.push('※ 受付を実際に止めるには migration_closeOldForms() を実行してください。');
+  Logger.log(log.join('\n'));
+  return log.join('\n');
+}
+
+/**
+ * form[name](arg) を試す。例外は投げず結果を返す。
+ * @return {{ok: boolean, available: boolean, error: *}}
+ */
+function migration_tryFormCall_(form, name, arg) {
+  if (typeof form[name] !== 'function') return { ok: false, available: false, error: null };
+  try {
+    form[name](arg);
+    return { ok: true, available: true, error: null };
+  } catch (e) {
+    return { ok: false, available: true, error: e };
+  }
+}
+
+/** migration_tryFormCall_ の結果を人が読める1行にする */
+function migration_callResultText_(r) {
+  if (!r.available) return 'このバージョンには無い';
+  return r.ok ? '成功' : '★失敗 → ' + r.error;
+}
+
+/** フォームの受付状態を人が読める文字列にする */
+function migration_formState_(form) {
+  var parts = [];
+  if (typeof form.isPublished === 'function') {
+    try { parts.push(form.isPublished() ? '公開' : '未公開'); } catch (e) { parts.push('公開状態は不明'); }
+  }
+  if (typeof form.isAcceptingResponses === 'function') {
+    try { parts.push(form.isAcceptingResponses() ? '受付中' : '受付停止'); } catch (e) { parts.push('受付状態は不明'); }
+  }
+  return parts.length ? parts.join(' / ') : '不明';
+}
+
+/**
+ * 読み戻して「本当に回答を受け付けないか」を判定する。
+ * 未公開か、受付停止のどちらかが確認できれば閉じている。
+ * @return {boolean|null} true=閉じている / false=まだ受け付ける / null=判定できない
+ */
+function migration_isFormClosed_(form) {
+  var known = false;
+  if (typeof form.isPublished === 'function') {
+    try {
+      if (!form.isPublished()) return true;   // 未公開のフォームは回答を受け付けない
+      known = true;
+    } catch (e) {}
+  }
+  if (typeof form.isAcceptingResponses === 'function') {
+    try {
+      if (!form.isAcceptingResponses()) return true;
+      known = true;
+    } catch (e) {}
+  }
+  return known ? false : null;
 }
 
 // ========================================
@@ -521,6 +753,45 @@ function migration_5_verify() {
     log.push('          設定シートの adminEmail を空にして setupFormIntegration() を再実行してください。');
   }
 
+  // --- 旧フォーム（移行メモに記録されたIDで確認する）---
+  // 設定シートのIDは移行時に空にしてあるので、旧フォームの手がかりは移行メモにしかない。
+  // 旧フォームが受付中のまま残ると、回答できるのに誰も処理しない状態になる。
+  if (memo) {
+    log.push('');
+    log.push('【旧フォーム】');
+    var oldKeys = Object.keys(memo).filter(function(k) { return k.indexOf('旧フォームID: ') === 0; });
+    var currentIds = {};
+    FI_KIND_ORDER_.forEach(function(kind) {
+      var cid = String(getConfigValue_(getFormSpec_(kind).formIdKey, '') || '').trim();
+      if (cid) currentIds[cid] = true;
+    });
+
+    var openedCount = 0;
+    var listedCount = 0;
+    oldKeys.forEach(function(k) {
+      var label = k.replace('旧フォームID: ', '');
+      var oldId = String(memo[k] || '').trim();
+      if (!oldId) return;
+      listedCount++;
+      if (currentIds[oldId]) { log.push('  --   ' + label + ': いま使っているフォームと同じIDです'); return; }
+      var form = openFormIfExists_(oldId);
+      if (!form) { log.push('  --   ' + label + ': 開けません（' + oldId + '）'); return; }
+      openedCount++;
+      var state = migration_isFormClosed_(form);
+      check(label + 'フォーム（旧）', state !== false,
+        state === true ? '受付停止' :
+        state === false ? '★まだ受付中（' + migration_formState_(form) + '）— 回答されても誰も処理しません' :
+        '状態を読み取れません');
+    });
+
+    if (!listedCount) {
+      log.push('  --   移行メモに旧フォームIDがありません');
+    } else if (!openedCount) {
+      log.push('  （旧フォームは新アカウントからは開けないのが普通です。');
+      log.push('    旧アカウントで migration_closeOldForms() を実行して確認してください）');
+    }
+  }
+
   // --- 人が確かめるしかないもの ---
   log.push('');
   log.push('【ここからは人が確認してください（コードからは判定できません）】');
@@ -529,6 +800,7 @@ function migration_5_verify() {
   log.push('  □ ウェブアプリを「新しいデプロイ」で公開し、/exec URL を控えたか');
   log.push('  □ test_sampleLabelPdf() でラベルPDFが作れるか');
   log.push('  □ 全端末の API URL を新しい /exec に貼り替えたか');
+  log.push('  □ 旧アカウントで migration_closeOldForms() を実行し、旧フォームが閉じているか');
 
   log.push('');
   log.push(ng === 0 ? '=== 自動で確認できる範囲はすべて OK ===' : '=== ★ ' + ng + ' 件が NG です。上を確認してください ===');

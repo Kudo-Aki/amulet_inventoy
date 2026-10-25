@@ -44,6 +44,7 @@ npm i -D playwright && npx playwright install chromium
 | `FormApp.create()` が**未公開**のフォームを作る | 未公開のフォームは回答を受け付けない。コードが明示的に公開していなければ落ちる |
 | `SpreadsheetApp.create()` が別のスプレッドシートを作る | 既存のものを返すと上書き事故を再現できない |
 | 時計を `__setNow` / `__advance` で固定できる | 採番や更新日時を決定的に検証する |
+| `form.__failOn = {メソッド名: 'エラー文'}` で特定の API だけ失敗させられる | Google の仕様変更で `setAcceptingResponses` だけ通らなくなった実例がある。片方が死んでも閉じられることを守る |
 
 ## スイートの内容
 
@@ -55,7 +56,7 @@ npm i -D playwright && npx playwright install chromium
 | `harness/product.js` | 商品コードの検証（英大文字1〜12文字）、大文字小文字を無視した重複拒否、既定値、選択肢同期の失敗時の記録 |
 | `harness/backup.js` | 採番の同秒衝突、保持世代の整理、プレビューの分類、範囲別の復元と取り消し、**ロック内から呼んでも止まらないこと** |
 | `harness/webactions.js` | `doGet` 経由の全アクション、`data` の二重デコード対策、`addHistoryBatch` の並びと上限、`getFormConfig` |
-| `harness/migration.js` | アカウント移行ヘルパー。現状の記録、旧環境の凍結、**設定シートのID 15個が空になること**、**箱番号のずれの検出**、移行後の合否判定 |
+| `harness/migration.js` | アカウント移行ヘルパー。現状の記録、旧環境の凍結、**設定シートのID 15個が空になること**、**箱番号のずれの検出**、移行後の合否判定、**フォームを閉じられないときにトリガーを消さないこと**、診断関数が状態を変えないこと |
 | `pw/smoke.js` | 管理画面のフォームカード4枚、バックアップ画面のプレビュー→復元、**在庫の上書き事故の防止**、**GASがHTMLを返したときに保存成功と表示しないこと**、API無効時に何も壊れないこと |
 
 ## テストを足すとき
