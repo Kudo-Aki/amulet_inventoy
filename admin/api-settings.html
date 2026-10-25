@@ -489,12 +489,22 @@
                     <li>
                         <strong>ファイルを追加</strong><br>
                         Apps Script プロジェクトに、リポジトリの <code>gas/</code> フォルダにある
-                        FormIntegration.gs / LabelPdf.gs / LabelTemplate.gs / QRCode.gs / Tests.gs を同じ名前で追加し、
+                        FormIntegration.gs / LabelPdf.gs / LabelTemplate.gs / QRCode.gs / Migration.gs / Tests.gs を同じ名前で追加し、
                         Code.gs を <code>gas/Code.gs</code> の内容に更新します（doGet の委譲と署名の設定シート化）
                     </li>
                     <li>
-                        <strong>サービスの確認</strong><br>
-                        左メニュー「サービス」に Drive API（v2）が追加されていることを確認（起案書作成を使っていれば追加済み）
+                        <strong>appsscript.json を貼る</strong><br>
+                        歯車「プロジェクトの設定」→「<code>appsscript.json</code> マニフェスト ファイルをエディタで表示する」に
+                        チェックを入れ、<code>gas/appsscript.json</code> の内容を貼ります。<br>
+                        <strong>ここに Drive API v2 の宣言が入っています。</strong>
+                        左メニュー「サービス」から手で Drive を追加すると <strong>v3 が既定で選ばれ</strong>、
+                        コードが呼ぶ <code>Drive.Files.insert</code> が無く（v3 は <code>Files.create</code>）
+                        ラベルPDFと起案書作成だけが失敗します
+                    </li>
+                    <li>
+                        <strong>migration_checkCode を実行</strong><br>
+                        貼り忘れたファイル・Drive の v2/v3・コードの古さをまとめて確認します
+                        （スプレッドシートの設定より前に実行できます）
                     </li>
                     <li>
                         <strong>setupFormIntegration を実行</strong><br>

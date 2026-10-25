@@ -18,6 +18,7 @@
  *   migration_2_freeze_skipForms() フォームを閉じられないまま先へ進む（URL未配布のときだけ）
  *
  * 【新アカウント】のプロジェクトに gas/ の全ファイル（これを含む）を貼ってから:
+ *   migration_checkCode()    ★最初にこれ。貼り忘れ・Drive v3・古いコードを検出（スプレッドシート不要）
  *   migration_4_adopt()      旧ブックを自分のドライブへコピー → プロパティ設定 → 設定シートのID類を空に
  *   （ここで setupFormIntegration() を実行し、ウェブアプリをデプロイする）
  *   migration_5_verify()     箱番号・フォーム・トリガー・設定を移行メモと突き合わせて合否判定
@@ -54,6 +55,141 @@ var MIGRATION_CLEAR_KEYS_ = [
   'productFormId', 'productFormUrl', 'productFormEditUrl',
   'adminEmail'
 ];
+
+// ========================================
+// 0. コードが正しく入ったかの自己点検
+// ========================================
+
+// 各ファイルの代表関数。無ければそのファイルを貼り忘れている。
+// typeof は未宣言の識別子に対しても例外にならないので、関数で包んで安全に調べる。
+var MIGRATION_EXPECTED_FILES_ = [
+  { file: 'Code.gs',            fn: 'doGet',                        has: function() { return typeof doGet === 'function'; } },
+  { file: 'QRCode.gs',          fn: 'qrPngBytes_',                  has: function() { return typeof qrPngBytes_ === 'function'; } },
+  { file: 'LabelTemplate.gs',   fn: 'getLabelTemplatePptxBlob_',    has: function() { return typeof getLabelTemplatePptxBlob_ === 'function'; } },
+  { file: 'LabelPdf.gs',        fn: 'buildLabelPdf_',               has: function() { return typeof buildLabelPdf_ === 'function'; } },
+  { file: 'FormIntegration.gs', fn: 'setupFormIntegration',         has: function() { return typeof setupFormIntegration === 'function'; } },
+  { file: 'Migration.gs',       fn: 'migration_1_snapshot',         has: function() { return typeof migration_1_snapshot === 'function'; } },
+  { file: 'Tests.gs',           fn: 'test_formSpecs',               has: function() { return typeof test_formSpecs === 'function'; } }
+];
+
+// 「古いコードが入っていないか」の目印。
+// ★旧プロジェクトを複製すると、そのプロジェクトのコードがそのまま来る。
+//   PR で関数が増えていない修正は、関数のソース文字列を見るしか手が無い
+//   （String(関数) で本文が取れる）。何を探しているかはコメントに残す。
+var MIGRATION_EXPECTED_FIXES_ = [
+  {
+    label: 'Migration.gs が新しいか',
+    has: function() { return typeof migration_assertOldEnvironment_ === 'function'; },
+    hint: 'gas/Migration.gs を貼り直してください（旧アカウント専用のガードがありません。' +
+          '新アカウントで凍結系を実行すると、動いているフォームとトリガーを壊します）'
+  },
+  {
+    label: 'FormIntegration.gs がフォームを公開するか',
+    has: function() {
+      return typeof createIntakeForm_ === 'function' &&
+        String(createIntakeForm_).indexOf('setPublished') >= 0;
+    },
+    hint: 'gas/FormIntegration.gs を貼り直してください（作ったフォームが未公開のままになり、' +
+          'URLを配っても回答を受け付けません）'
+  },
+  {
+    label: 'Code.gs が initializeSpreadsheet を守るか',
+    has: function() {
+      return typeof initializeSpreadsheet === 'function' &&
+        String(initializeSpreadsheet).indexOf('アプリが既存データを見られなくなります') >= 0;
+    },
+    hint: 'gas/Code.gs を貼り直してください（一度の誤実行で既存データへのリンクを' +
+          '黙って失う経路が残っています）'
+  }
+];
+
+/**
+ * gas/ のコードが正しく入ったかを点検する。
+ *
+ * ★スプレッドシートを必要としない。だから新しいプロジェクトにコードを貼った直後、
+ *   スクリプトプロパティを設定する前に実行できる（＝新環境で最初にできる確認）。
+ *
+ * 見るのは3点:
+ *   (a) 7ファイルが全部あるか     … 手で貼ると1つ抜けることがある
+ *   (b) Drive 詳細サービスが v2 か … v3 だとラベルPDFと起案書作成だけが後から壊れる
+ *   (c) 最近の修正が入っているか   … 旧プロジェクトを複製すると古いコードが来る
+ */
+function migration_checkCode() {
+  var r = migration_checkCode_();
+  Logger.log(r.log);
+  return r.log;
+}
+
+/** @return {{ok: boolean, ng: Array, log: string}} */
+function migration_checkCode_() {
+  var log = ['=== コードの自己点検 ==='];
+  var ng = [];
+  var check = function(label, ok, detail) {
+    log.push((ok ? '  OK   ' : '  ★NG ') + label + (detail ? ' — ' + detail : ''));
+    if (!ok) ng.push(label);
+  };
+
+  // --- (a) ファイルが揃っているか ---
+  log.push('【ファイル】');
+  var missing = [];
+  MIGRATION_EXPECTED_FILES_.forEach(function(e) {
+    var ok = false;
+    try { ok = !!e.has(); } catch (err) { ok = false; }
+    check(e.file, ok, ok ? '' : e.fn + '() がありません');
+    if (!ok) missing.push(e.file);
+  });
+  if (missing.length) {
+    log.push('       → リポジトリの gas/ から ' + missing.join(' / ') + ' を貼ってください');
+  }
+
+  // --- (b) Drive 詳細サービス（v2 か v3 か）---
+  log.push('');
+  log.push('【Drive 詳細サービス】');
+  var drive = migration_checkDriveVersion_();
+  check('Drive API', drive.ok, drive.detail);
+  if (!drive.ok) {
+    log.push('       → 歯車「プロジェクトの設定」→「appsscript.json マニフェスト ファイルを');
+    log.push('          エディタで表示する」にチェック → gas/appsscript.json の内容を貼り直す');
+    log.push('          （エディタの「サービス」から手で Drive を足すと v3 が既定で選ばれます）');
+  }
+
+  // --- (c) 古いコードが入っていないか ---
+  log.push('');
+  log.push('【コードの新しさ】');
+  MIGRATION_EXPECTED_FIXES_.forEach(function(e) {
+    var ok = false;
+    try { ok = !!e.has(); } catch (err) { ok = false; }
+    check(e.label, ok, ok ? '' : '古い版です');
+    if (!ok) log.push('       → ' + e.hint);
+  });
+
+  log.push('');
+  log.push(ng.length === 0
+    ? '=== コードは正しく入っています ==='
+    : '=== ★ ' + ng.length + ' 件が NG です: ' + ng.join(' / ') + ' ===');
+
+  return { ok: ng.length === 0, ng: ng, log: log.join('\n') };
+}
+
+/**
+ * Drive 詳細サービスが v2 か v3 かを見る。
+ * コードは v2 の Drive.Files.insert を呼ぶ（gas/LabelPdf.gs, gas/Code.gs）。
+ * v3 では insert が無く create になるため、ラベルPDFと起案書作成だけが失敗する。
+ */
+function migration_checkDriveVersion_() {
+  if (typeof Drive === 'undefined' || !Drive) {
+    return { ok: false, detail: '詳細なサービスに Drive がありません' };
+  }
+  var files = null;
+  try { files = Drive.Files; } catch (e) { files = null; }
+  if (!files) return { ok: false, detail: 'Drive.Files が見つかりません' };
+  if (typeof files.insert === 'function') return { ok: true, detail: 'v2（Files.insert があります）' };
+  if (typeof files.create === 'function') {
+    return { ok: false, detail: '★v3 が選ばれています（Files.create しかありません）。' +
+      'コードは v2 の Files.insert を呼ぶため、ラベルPDFと起案書作成が失敗します' };
+  }
+  return { ok: false, detail: 'Files.insert も Files.create も見つかりません' };
+}
 
 // ========================================
 // 1. 現状の記録（読み取りのみ）
@@ -808,6 +944,14 @@ function migration_5_verify() {
   log.push('掴んでいるブック: ' + ss.getName());
   log.push('  ID: ' + ss.getId());
   log.push('  URL: ' + ss.getUrl());
+  log.push('');
+
+  // --- コードが正しく入っているか（データの照合より先に見る）---
+  // ファイルを1つ貼り忘れていたり Drive が v3 になっていたら、
+  // 以降の判定が全部 OK でも本番で壊れる
+  var code = migration_checkCode_();
+  log.push(code.log);
+  ng += code.ng.length;
   log.push('');
 
   if (!memo) {
