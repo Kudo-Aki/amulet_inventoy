@@ -428,6 +428,9 @@ function makeContext(extra) {
       getScriptTimeZone: () => 'Asia/Tokyo',
     },
     ScriptApp: {
+      // デプロイされたウェブアプリの情報。テストから差し替えて
+      // 「デプロイが無い」「URLが取れない」状況も作れるようにしてある
+      getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/OLDDEPLOY/exec' }),
       getProjectTriggers: () => triggers.slice(),
       newTrigger: (handler) => makeTriggerBuilder(handler),
       deleteTrigger: (t) => { const i = triggers.indexOf(t); if (i >= 0) triggers.splice(i, 1); },
