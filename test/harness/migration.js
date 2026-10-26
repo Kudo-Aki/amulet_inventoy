@@ -42,6 +42,16 @@ const recordWrites = (ctx) => {
 /** 4本のフォームすべてに失敗注入を仕掛ける */
 const failAllForms = (ctx, failOn) => formsOf(ctx).forEach(f => { f.__failOn = failOn; });
 
+/** 移行メモの1項目の値を書き換える（記録前のバージョンを模すときに使う） */
+function setMemo(ctx, ss, key, value) {
+  const sheet = ss.getSheetByName('移行メモ');
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]) === key) { sheet.getRange(i + 2, 2, 1, 1).setValues([[value]]); return true; }
+  }
+  return false;
+}
+
 /** 旧環境を一通り作る: フォーム4本・トリガー・箱台帳・入荷1件 */
 function bootOldEnv() {
   const ctx = boot();
@@ -147,6 +157,23 @@ s.test('migration_1_snapshot が現状を「移行メモ」シートに記録す
   assert.ok(String(memo['旧フォームID: 棚卸']).length > 0, 'フォームIDを記録');
   assert.strictEqual(memo['旧フォーム状態: 入荷'], '公開 / 受付中',
     '停止処理と同じ読み方で記録する（片方だけ見ると同じフォームで判定が食い違う）');
+});
+
+// 旧アカウントを残す場合、旧デプロイが最も危険な残骸になる。
+// URLを記録しておかないと「生きているか」を確かめる手段が無い
+s.test('migration_1_snapshot が旧ウェブアプリURLを記録する', () => {
+  const ctx = bootOldEnv();
+  ctx.migration_1_snapshot();
+  assert.strictEqual(memoOf(ctx)['旧ウェブアプリURL'],
+    'https://script.google.com/macros/s/OLDDEPLOY/exec');
+});
+
+s.test('migration_1_snapshot は getService が使えなくても止まらない', () => {
+  const ctx = bootOldEnv();
+  ctx.ScriptApp.getService = () => { throw new Error('No deployment'); };
+  ctx.migration_1_snapshot();
+  assert.strictEqual(memoOf(ctx)['旧ウェブアプリURL'], '取得できず（デプロイが無いか権限なし）');
+  assert.strictEqual(String(memoOf(ctx)['商品数']), '3', '他の項目は普通に記録される');
 });
 
 s.test('migration_1_snapshot は何度実行しても行が重複しない', () => {
@@ -708,6 +735,51 @@ s.test('migration_5_verify がコードの自己点検も含める', () => {
   const out = ctx.migration_5_verify();
   assert.ok(out.includes('★v3 が選ばれています'), out);
   assert.ok(!out.includes('自動で確認できる範囲はすべて OK'), 'コードの NG を合否に数える');
+});
+
+s.test('migration_5_verify が旧ウェブアプリの確認手順を出す', () => {
+  const ctx = migrateAll();
+  const out = ctx.migration_5_verify();
+  assert.ok(out.includes('【旧ウェブアプリ】'), out);
+  assert.ok(out.includes('https://script.google.com/macros/s/OLDDEPLOY/exec'), '記録したURLを出す');
+  assert.ok(out.includes('シークレットウィンドウ'), '確かめ方を出す');
+  assert.ok(out.includes('★旧デプロイはまだ生きています'), 'どう読むかを出す');
+});
+
+s.test('migration_5_verify は旧ウェブアプリURLが無ければ別の確認方法を出す', () => {
+  const ctx = migrateAll();
+  setMemo(ctx, cur(ctx), '旧ウェブアプリURL', '取得できず（デプロイが無いか権限なし）');
+  const out = ctx.migration_5_verify();
+  assert.ok(out.includes('★移行メモに旧ウェブアプリURLがありません'), out);
+  assert.ok(out.includes('「デプロイを管理」'), '直接確認する方法を案内する');
+});
+
+// Code.gs の SPREADSHEET_NAME と migration_4_adopt のコピー名が同一なので、
+// 旧ブックの共有を残すと同名ファイルが2つ並ぶ。間違ったほうを編集しても画面は動く
+s.test('migration_5_verify が同名の旧ブックを警告する', () => {
+  const ctx = migrateAll();
+  const out = ctx.migration_5_verify();
+  assert.ok(out.includes('【旧スプレッドシート】'), out);
+  assert.ok(out.includes('★同じ名前のブックが2つ見えています'), out);
+  assert.ok(out.includes('リネームするか、共有を解除'), '取るべき手を出す');
+  assert.ok(!out.includes('★NG 旧'), '移行自体は壊れていないので NG には数えない');
+});
+
+s.test('migration_5_verify は旧ブックをリネームすれば警告しない', () => {
+  const ctx = migrateAll();
+  const memo = memoOf(ctx, cur(ctx));
+  ctx.__spreadsheets[String(memo['スプレッドシートID'])].name = 'お守り在庫管理データ_旧_2026-10';
+  const out = ctx.migration_5_verify();
+  assert.ok(!out.includes('★同じ名前のブックが2つ'), out);
+  assert.ok(out.includes('旧ブックは別名です'), out);
+  assert.ok(out.includes('自動で確認できる範囲はすべて OK'), out);
+});
+
+s.test('migration_5_verify の確認項目に旧デプロイのアーカイブが入っている', () => {
+  const ctx = migrateAll();
+  const out = ctx.migration_5_verify();
+  assert.ok(out.includes('□ 旧プロジェクトのデプロイをアーカイブしたか ★最重要'), out);
+  assert.ok(out.includes('恒久的に応答し続けます'), '残す場合の危険を書く');
 });
 
 s.test('migration_5_verify がトリガー未設置を検出する', () => {

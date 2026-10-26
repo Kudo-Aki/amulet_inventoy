@@ -274,6 +274,22 @@ function migration_1_snapshot() {
   }
   push('トリガー', handlers.sort().join(' / ') || 'なし');
 
+  // 旧ウェブアプリ（デプロイ）のURL。
+  // ★旧アカウントを残す場合、ここが最も危険な残骸になる。
+  //   旧デプロイは appsscript.json の access: ANYONE_ANONYMOUS で「全員」公開、
+  //   旧プロジェクトのスクリプトプロパティは旧ブックを指したまま。つまり古い /exec を
+  //   持つ端末が1台でも残っていれば旧ブックに書き込み続け、しかも正しく JSON を返すので
+  //   画面は「保存しました」と出る（js/api.js の非JSON判定も効かない）。
+  //   アーカイブしたか確認できるよう、URLをここに残す。
+  var webAppUrl = '';
+  try {
+    var svc = ScriptApp.getService();
+    webAppUrl = (svc && typeof svc.getUrl === 'function') ? (svc.getUrl() || '') : '';
+  } catch (e) {
+    webAppUrl = '';
+  }
+  push('旧ウェブアプリURL', webAppUrl || '取得できず（デプロイが無いか権限なし）');
+
   // 人が記入した設定（署名など）。自動設定キーは移行時に空にするので記録しない
   var cfg = getConfigMap_();
   Object.keys(cfg).sort().forEach(function(k) {
@@ -1118,6 +1134,52 @@ function migration_5_verify() {
     }
   }
 
+  // --- 旧ウェブアプリ（コードからは判定できないが、最も危険な残骸）---
+  // 旧アカウントを残す場合、旧デプロイは恒久的に「全員（匿名含む）」で応答し続ける。
+  // 記録の有無に関係なく危険なので、この節は必ず出す。
+  log.push('');
+  log.push('【旧ウェブアプリ】');
+  log.push('  旧デプロイは「全員（匿名ユーザーを含む）」公開のままです。');
+  log.push('  アーカイブしないと、古い /exec URL を持つ端末が旧ブックに書き込み続け、');
+  log.push('  しかも画面には「保存しました」と出ます（正しく JSON が返るため誰も気づきません）。');
+  var oldWebApp = memo ? String(memo['旧ウェブアプリURL'] || '').trim() : '';
+  if (oldWebApp.indexOf('http') === 0) {
+    log.push('  確認: 次のURLをシークレットウィンドウで開いてください');
+    log.push('    ' + oldWebApp);
+    log.push('    → JSON（{"ok":true} など）が返る: ★旧デプロイはまだ生きています');
+    log.push('    → エラーページになる: アーカイブできています');
+  } else {
+    log.push('  ★移行メモに旧ウェブアプリURLがありません');
+    log.push('    （URLを記録する前のバージョンで migration_1_snapshot() を実行した場合）');
+    log.push('    旧プロジェクトを開いて「デプロイを管理」で、有効なデプロイが');
+    log.push('    残っていないか直接確認してください。');
+  }
+
+  // --- 旧ブックの取り違え（名前が同じだと起きる）---
+  // Code.gs の SPREADSHEET_NAME と migration_4_adopt のコピー名が同一なので、
+  // 旧ブックの共有を残すと新アカウントの Drive に同名ファイルが2つ並ぶ。
+  // 間違ったほうを編集しても画面は普通に動くので気づけない。
+  if (memo) {
+    var oldSsId = String(memo['スプレッドシートID'] || '').trim();
+    if (oldSsId && oldSsId !== ss.getId()) {
+      var oldSs = null;
+      try { oldSs = SpreadsheetApp.openById(oldSsId); } catch (e) { oldSs = null; }
+      log.push('');
+      log.push('【旧スプレッドシート】');
+      if (!oldSs) {
+        log.push('  --   このアカウントからは開けません（取り違える心配はありません）');
+      } else if (oldSs.getName() === ss.getName()) {
+        log.push('  ★同じ名前のブックが2つ見えています: 「' + ss.getName() + '」');
+        log.push('    旧: ' + oldSsId + '（もう使われていません）');
+        log.push('    新: ' + ss.getId() + '（こちらが本番）');
+        log.push('    間違ったほうを編集しても画面は普通に動くので気づけません。');
+        log.push('    旧アカウントで旧ブックをリネームするか、共有を解除してください。');
+      } else {
+        log.push('  OK   旧ブックは別名です: 「' + oldSs.getName() + '」（取り違えません）');
+      }
+    }
+  }
+
   // --- 人が確かめるしかないもの ---
   log.push('');
   log.push('【ここからは人が確認してください（コードからは判定できません）】');
@@ -1126,6 +1188,9 @@ function migration_5_verify() {
   log.push('  □ ウェブアプリを「新しいデプロイ」で公開し、/exec URL を控えたか');
   log.push('  □ test_sampleLabelPdf() でラベルPDFが作れるか');
   log.push('  □ 全端末の API URL を新しい /exec に貼り替えたか');
+  log.push('  □ 旧プロジェクトのデプロイをアーカイブしたか ★最重要');
+  log.push('     → 旧プロジェクト →「デプロイを管理」→ 有効なデプロイをアーカイブ');
+  log.push('     → 旧アカウントを残す場合、放置すると恒久的に応答し続けます');
   log.push('  □ 旧フォーム4本を閉じたか');
   log.push('     → 上の【旧フォーム】に出した編集URLを旧アカウントで開き、右上の「公開」を解除');
   log.push('     ※ 旧プロジェクトのコードは最後に貼った版で凍結されています。');
