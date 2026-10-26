@@ -743,6 +743,19 @@ function migration_readFormFlags_(form) {
   return { published: published, accepting: accepting };
 }
 
+/**
+ * 旧フォームの編集URL。移行メモに残っているIDから組み立てる。
+ *
+ * ★関数名ではなくURLを案内する理由: 旧プロジェクトのコードは「最後に貼った版」で
+ *   凍結されているので、あとで追加した migration_* 関数は旧プロジェクトに存在しない。
+ *   URLならコードの版に依存せず、開けばその場で確認・解除ができる。
+ *
+ * 公開URL（/forms/d/e/<別のID>/viewform）はファイルIDから組み立てられないので編集URLにする。
+ */
+function migration_formEditUrl_(id) {
+  return 'https://docs.google.com/forms/d/' + String(id) + '/edit';
+}
+
 /** フォームの状態を人が読める文字列にする */
 function migration_formState_(form) {
   var f = migration_readFormFlags_(form);
@@ -1073,13 +1086,17 @@ function migration_5_verify() {
         return;
       }
       var form = openFormIfExists_(oldId);
-      if (!form) { log.push('  --   ' + label + ': 開けません（' + oldId + '）'); return; }
+      if (!form) {
+        log.push('  --   ' + label + ': このアカウントからは開けません（普通です）');
+        log.push('         旧アカウントで開く: ' + migration_formEditUrl_(oldId));
+        return;
+      }
       openedCount++;
       var state = migration_isFormClosed_(form);
       if (state === null) {
         // 「OK ― 状態を読み取れません」は矛盾している。判定しないほうが正直
-        log.push('  --   ' + label + 'フォーム（旧）: 状態を読み取れません' +
-          '（旧アカウントで migration_closeOldForms() を実行して確認してください）');
+        log.push('  --   ' + label + 'フォーム（旧）: 状態を読み取れません');
+        log.push('         開いて確認: ' + migration_formEditUrl_(oldId));
         return;
       }
       check(label + 'フォーム（旧）', state === true,
@@ -1095,8 +1112,9 @@ function migration_5_verify() {
       log.push('      突き合わせも自分自身との比較になり意味を失います）');
       log.push('    旧フォームの確認は旧アカウントのプロジェクトで行ってください。');
     } else if (!openedCount) {
-      log.push('  （旧フォームは新アカウントからは開けないのが普通です。');
-      log.push('    旧アカウントで migration_closeOldForms() を実行して確認してください）');
+      log.push('  （旧フォームを新アカウントから開けないのは普通です。コードからは確認できません）');
+      log.push('  確認のしかた: 旧アカウントにログインして上の編集URLを開き、');
+      log.push('    右上の「公開」が解除されているか見てください。公開中なら解除します。');
     }
   }
 
@@ -1108,7 +1126,11 @@ function migration_5_verify() {
   log.push('  □ ウェブアプリを「新しいデプロイ」で公開し、/exec URL を控えたか');
   log.push('  □ test_sampleLabelPdf() でラベルPDFが作れるか');
   log.push('  □ 全端末の API URL を新しい /exec に貼り替えたか');
-  log.push('  □ 旧アカウントで migration_closeOldForms() を実行し、旧フォームが閉じているか');
+  log.push('  □ 旧フォーム4本を閉じたか');
+  log.push('     → 上の【旧フォーム】に出した編集URLを旧アカウントで開き、右上の「公開」を解除');
+  log.push('     ※ 旧プロジェクトのコードは最後に貼った版で凍結されています。');
+  log.push('       あとで追加した migration_* 関数は旧プロジェクトに無いので、');
+  log.push('       関数ではなくブラウザから閉じてください');
 
   log.push('');
   log.push(ng === 0 ? '=== 自動で確認できる範囲はすべて OK ===' : '=== ★ ' + ng + ' 件が NG です。上を確認してください ===');

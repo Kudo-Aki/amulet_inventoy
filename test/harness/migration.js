@@ -656,7 +656,48 @@ s.test('migration_5_verify は状態が読めない旧フォームを OK と言�
   assert.ok(out.includes('状態を読み取れません'), out);
   assert.ok(!/OK\s+\S*フォーム（旧）/.test(out), '読めないものを OK と書かない');
   assert.ok(!out.includes('★NG 入荷フォーム（旧）'), '読めないだけで NG にもしない');
-  assert.ok(out.includes('旧アカウントで migration_closeOldForms()'), '確かめ方を案内する');
+  // 関数名ではなく編集URLを案内する（旧プロジェクトにその関数が無いことがある）
+  assert.ok(out.includes('開いて確認: https://docs.google.com/forms/d/'), out);
+});
+
+// ★旧プロジェクトのコードは「最後に貼った版」で凍結されている。
+//   あとで追加した migration_* 関数は旧プロジェクトに存在しないので、
+//   案内文でその実行を前提にしてはいけない（実際にそれで詰まった）
+s.test('migration_5_verify は旧プロジェクトに無い関数の実行を指示しない', () => {
+  const ctx = migrateAll();
+  const out = ctx.migration_5_verify();
+  assert.ok(!out.includes('旧アカウントで migration_closeOldForms()'),
+    '旧プロジェクトの Migration.gs が古いと存在しない関数なので指示しない');
+  assert.ok(out.includes('□ 旧フォーム4本を閉じたか'), '代わりにブラウザ手順を出す');
+  assert.ok(out.includes('右上の「公開」を解除'), out);
+  assert.ok(out.includes('最後に貼った版で凍結されています'), 'なぜ関数を使わないのか説明する');
+});
+
+s.test('migration_5_verify が開けない旧フォームの編集URLを出す', () => {
+  const ctx = migrateAll();
+  const memo = memoOf(ctx, cur(ctx));
+  const oldIds = Object.keys(memo)
+    .filter(k => k.indexOf('旧フォームID: ') === 0)
+    .map(k => String(memo[k]))
+    .filter(Boolean);
+  assert.strictEqual(oldIds.length, 4, '移行メモに旧フォームIDが4本ある');
+  oldIds.forEach(id => { delete ctx.__forms[id]; });   // 新アカウントから開けない状態
+
+  const out = ctx.migration_5_verify();
+
+  oldIds.forEach(id => {
+    assert.ok(out.includes('https://docs.google.com/forms/d/' + id + '/edit'),
+      id + ' の編集URLが出る');
+  });
+  assert.ok(out.includes('このアカウントからは開けません（普通です）'), out);
+  assert.ok(out.includes('右上の「公開」が解除されているか'), '確認のしかたを出す');
+  assert.ok(!out.includes('★NG'), '開けないだけで NG にはしない');
+});
+
+s.test('migration_formEditUrl_ が編集URLを組み立てる', () => {
+  const ctx = boot();
+  assert.strictEqual(ctx.migration_formEditUrl_('1AbC_dEf'),
+    'https://docs.google.com/forms/d/1AbC_dEf/edit');
 });
 
 s.test('migration_5_verify がコードの自己点検も含める', () => {
